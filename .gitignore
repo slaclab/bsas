@@ -1,0 +1,10 @@
+/cfg/
+/bin/
+/lib/
+/db/
+/dbd/
+/include/
+/configure/*.local
+envPaths
+O.*/
+*.orig
