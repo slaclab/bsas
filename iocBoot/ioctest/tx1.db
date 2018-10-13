@@ -1,0 +1,25 @@
+record(ao, "$(P)period") {
+    field(VAL, "1")
+    field(OUT, "$(P)drive.ODLY")
+    field(PINI, "YES")
+}
+
+record(calcout, "$(P)drive") {
+    field(PINI, "RUNNING")
+    field(ODLY, "1")
+    field(OUT , "$(P)drive.PROC CA")
+    field(FLNK, "$(P)cnt1")
+}
+
+record(calc, "$(P)cnt1") {
+    field(INPA, "$(P)cnt1")
+    field(CALC, "A+1")
+    field(FLNK, "$(P)cnt2")
+#    field(TPRO, "1")
+}
+
+record(calc, "$(P)cnt2") {
+    field(INPA, "$(P)cnt1")
+    field(CALC, "A")
+    field(TSEL, "$(P)cnt1.TIME")
+}

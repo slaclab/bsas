@@ -1,0 +1,11 @@
+registrar(bsasRegistrar)
+variable(collectorCaDebug,int)
+variable(collectorCaScalarDepth,int)
+variable(collectorCaArrayDepth,int)
+
+variable(collectorDebug,int)
+variable(maxEvents,int)
+variable(maxEventAge,double)
+variable(maxFlushPeriod,double)
+
+variable(receiverPVADebug,int)

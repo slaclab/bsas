@@ -5,34 +5,38 @@ include $(TOP)/configure/CONFIG
 #  ADD MACRO DEFINITIONS AFTER THIS LINE
 #=============================
 
-#=============================
-# Build the IOC application
+PROD_SRCS += collector.cpp
+PROD_SRCS += collect_ca.cpp
+PROD_SRCS += receiver_pva.cpp
+PROD_SRCS += coordinator.cpp
+
 
 PROD_IOC = bsas
-# bsas.dbd will be created and installed
 DBD += bsas.dbd
 
-# bsas.dbd will be made up from these files:
 bsas_DBD += base.dbd
+bsas_DBD += system.dbd
+bsas_DBD += PVAServerRegister.dbd
+bsas_DBD += qsrv.dbd
+bsas_DBD += bsasSupport.dbd
 
-# Include dbd files from all support applications:
-#bsas_DBD += xxx.dbd
-
-# Add all the support libraries needed by this IOC
-#bsas_LIBS += xxx
-
-# bsas_registerRecordDeviceDriver.cpp derives from bsas.dbd
+bsas_SRCS += bsasMain.cpp
 bsas_SRCS += bsas_registerRecordDeviceDriver.cpp
+bsas_SRCS += hooks.cpp
 
-# Build the main IOC entry point on workstation OSs.
-bsas_SRCS_DEFAULT += bsasMain.cpp
-bsas_SRCS_vxWorks += -nil-
+PROD_HOST += test_collector
+test_collector_SRCS += test_collector.cpp
+TESTS += test_collector
 
-# Add support from base/src/vxWorks if needed
-#bsas_OBJS_vxWorks += $(EPICS_BASE_BIN)/vxComLibrary
+PROD_HOST += test_receiver
+test_receiver_SRCS += test_receiver.cpp
+TESTS += test_receiver
 
-# Finally link to the EPICS Base libraries
-bsas_LIBS += $(EPICS_BASE_IOC_LIBS)
+PROD_LIBS += qsrv
+PROD_LIBS += $(EPICS_BASE_PVA_CORE_LIBS)
+PROD_LIBS += $(EPICS_BASE_IOC_LIBS)
+
+TESTSCRIPTS_HOST += $(TESTS:%=%.t)
 
 #===========================
 

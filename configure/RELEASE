@@ -25,6 +25,9 @@
 # Use RELEASE.local
 
 # Requires
+#PVA2PVA=
+#PVACCESS=
+#PVDATA=
 #EPICS_BASE =
 
 # These allow developers to override the RELEASE variable settings

@@ -1,0 +1,5 @@
+record(calc, "$(P)cnt3") {
+    field(INPA, "$(P)cnt1 CP")
+    field(CALC, "A")
+    field(TSEL, "$(P)cnt1.TIME CA")
+}

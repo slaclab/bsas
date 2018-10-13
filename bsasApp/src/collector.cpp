@@ -1,0 +1,278 @@
+
+#include <list>
+#include <algorithm>
+
+#include <epicsMath.h>
+#include <errlog.h>
+
+#include "collector.h"
+
+#include <epicsExport.h>
+
+namespace pvd = epics::pvData;
+
+// max number of potentially complete events to track
+static int maxEvents = 20;
+// timeout to flush partial events
+static double maxEventAge = 2.0;
+// holdoff after delivering events
+double maxFlushPeriod = 0.5;
+
+int collectorDebug;
+
+Collector::Collector(CAContext& ctxt, const names_t &names, unsigned int prio)
+    :ctxt(ctxt)
+    ,receivers_changed(false)
+    ,waiting(false)
+    ,run(true)
+    ,processor(pvd::Thread::Config(this, &Collector::process)
+               .name("BSA Processor")
+               .prio(prio))
+    ,oldest_key(0u)
+{
+    pvs.resize(names.size());
+
+    for(size_t i=0, N=names.size(); i<N; i++)
+    {
+        pvs[i].sub.reset(new Subscription(ctxt, i, names[i], *this));
+    }
+
+    processor.start();
+}
+
+Collector::~Collector()
+{
+    close();
+}
+
+void Collector::close()
+{
+    for(size_t i=0, N=pvs.size(); i<N; i++) {
+        pvs[i].sub->close();
+    }
+
+    {
+        Guard G(mutex);
+        run = false;
+    }
+    wakeup.signal();
+    processor.exitWait();
+}
+
+void Collector::notEmpty(Subscription *sub)
+{
+    bool wakeme;
+    {
+        Guard G(mutex);
+        pvs[sub->column].ready = true;
+        wakeme = waiting;
+    }
+    if(collectorDebug>2)
+        errlogPrintf("## %s notEmpty %s\n", sub->pvname.c_str(), wakeme?" wakeup":"");
+    if(wakeme)
+        wakeup.signal();
+}
+
+
+void Collector::add_receiver(Receiver* recv)
+{
+    std::vector<std::string> names;
+    {
+        Guard G(mutex);
+        receivers.insert(recv);
+        receivers_changed = true;
+
+        names.reserve(pvs.size());
+        for(size_t i=0, N=pvs.size(); i<N; i++) {
+            names.push_back(pvs[i].sub->pvname);
+        }
+    }
+    recv->names(names);
+}
+
+void Collector::remove_receiver(Receiver* recv)
+{
+    Guard G(mutex);
+    receivers.erase(recv);
+    receivers_changed = true;
+}
+
+void Collector::process()
+{
+    Guard G(mutex);
+
+    epicsTimeGetCurrent(&now);
+
+    while(run) {
+        waiting = false; // set if input queues emptied
+
+        if(collectorDebug>2) {
+            char buf[30];
+            epicsTimeToStrftime(buf, sizeof(buf), "%H:%M:%S.%f", &now);
+            errlogPrintf("## processor wakeup %s\n", buf);
+        }
+
+        now_key = now.secPastEpoch;
+        now_key <<= 32;
+        now_key |= now.nsec;
+
+        process_dequeue();
+        process_test();
+
+        if(receivers_changed) {
+            // copy for use while unlocked
+            receivers_shadow = receivers;
+            receivers_changed = false;
+        }
+
+        bool willwait = waiting;
+        {
+            UnGuard U(G);
+
+            if(!completed.empty()) {
+                for(receivers_t::iterator it(receivers_shadow.begin()), end(receivers_shadow.end()); it!=end; ++it) {
+                    (*it)->slices(completed);
+                }
+                epicsThreadSleep(maxFlushPeriod);
+            }
+
+            if(willwait)
+                wakeup.wait();
+            epicsTimeGetCurrent(&now);
+        }
+    }
+}
+
+void Collector::process_dequeue()
+{
+    // process input queues
+    bool nothing = false; // true if all queues empty
+    // break if:
+    // * nothing to do
+    // * # of potentially complete events exceeds limit
+    while(!nothing && events.size() < size_t(std::max(10, maxEvents))) {
+        nothing = true;
+
+        std::list<events_t::mapped_type> slices_done;
+
+        for(size_t i=0, N=pvs.size(); i<N; i++) {
+            PV& pv = pvs[i];
+
+            if(!pv.ready) continue;
+
+            DBRValue val(pv.sub->pop());
+            if(!val.valid()) {
+                pv.ready = false;
+                continue;
+            }
+
+            nothing = false; // we will do something
+
+            epicsUInt64 key = val->ts.secPastEpoch;
+            key <<= 32;
+            key |= val->ts.nsec;
+
+            pv.connected = val->sevr<=3;
+
+            if(collectorDebug>3) {
+                errlogPrintf("## %s event:%llx sevr %u\n", pv.sub->pvname.c_str(), key, val->sevr);
+            }
+
+            if(pv.connected && key > oldest_key) {
+                // data event
+
+                // create/update a slice
+
+                events_t::mapped_type& slice = events[key]; // implicitly allocs new slice
+                slice.resize(pvs.size());
+
+                if(slice[i].valid()) {
+                    errlogPrintf("%s : ignore duplicate key %llx\n", pvs[i].sub->pvname.c_str(), key);
+
+                } else {
+                    slice[i].swap(val);
+                }
+
+            } else if(pv.connected) {
+                // disconnect event
+            } else if(collectorDebug>0) {
+                errlogPrintf("## %s ignore leftovers of %llx\n", pvs[i].sub->pvname.c_str(), key);
+            }
+        }
+    }
+
+    waiting = nothing; // wait if we emptied all queues
+}
+
+void Collector::process_test()
+{
+    epicsUInt64 max_age = maxEventAge;
+    max_age <<= 32;
+    max_age |= epicsUInt32(1000000000u * fmod(maxEventAge, 1.0));
+
+    // iterate from oldest.  Find first which will not be flushed
+    events_t::iterator it(events.begin()), end(events.end());
+    size_t i=0;
+    for(; it!=end; ++it, i++) {
+        // flush if
+
+        // * slice key is too old
+        epicsInt64 key_age = epicsInt64(now_key) - epicsInt64(it->first);
+
+        if(key_age >= epicsInt64(max_age)) {
+            if(collectorDebug>4) {
+                errlogPrintf("## test slice %llx too old %llx >= %llx\n", it->first, key_age, max_age);
+            }
+            continue;
+        }
+
+        // * all PVs are either disconnected or have data
+        events_t::mapped_type& slice = it->second;
+        // test if all data available or disconnected
+        bool complete = true;
+        for(size_t i=0, N=pvs.size(); complete && i<N; i++) {
+            complete = !pvs[i].connected || slice[i].valid();
+            if(!complete && collectorDebug>4) {
+                errlogPrintf("## test slice %llx found incomplete %s\n", it->first, pvs[i].sub->pvname.c_str());
+            }
+        }
+
+        if(!complete) break;
+    }
+
+    completed.clear(); // paranoia, should already be empty
+
+    // 'it' points to first element _not_ to remove
+
+    if(collectorDebug>3) {
+        if(it==events.begin()) {
+            errlogPrintf("## No events complete\n");
+        } else {
+            errlogPrintf("## %zu events complete\n", i);
+        }
+    }
+
+    end = it;
+    it = events.begin();
+    completed.reserve(i);
+    while(it!=end) {
+        events_t::iterator cur = it++;
+
+        if(collectorDebug>4) {
+            errlogPrintf("## complete key %llx\n", cur->first);
+        }
+        assert(cur->first > oldest_key);
+        oldest_key = cur->first;
+
+        completed.push_back(*cur);
+
+        events.erase(cur);
+    }
+}
+
+extern "C" {
+epicsExportAddress(int, maxEvents);
+epicsExportAddress(double, maxEventAge);
+epicsExportAddress(int, collectorDebug);
+epicsExportAddress(double, maxFlushPeriod);
+}
