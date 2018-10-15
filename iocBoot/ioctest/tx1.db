@@ -15,10 +15,23 @@ record(calc, "$(P)cnt1") {
     field(INPA, "$(P)cnt1")
     field(CALC, "A+1")
     field(FLNK, "$(P)cnt2")
-#    field(TPRO, "1")
 }
 
 record(calc, "$(P)cnt2") {
+    field(INPA, "$(P)cnt1")
+    field(CALC, "A")
+    field(TSEL, "$(P)cnt1.TIME")
+    field(FLNK, "$(P)cnt3x")
+}
+
+record(calcout, "$(P)cnt3x") {
+    field(INPA, "$(P)cnt1")
+    field(CALC, "A%2==0")
+    field(OOPT, "When Non-zero")
+    field(OUT , "$(P)cnt3.PROC PP")
+}
+
+record(calc, "$(P)cnt3") {
     field(INPA, "$(P)cnt1")
     field(CALC, "A")
     field(TSEL, "$(P)cnt1.TIME")

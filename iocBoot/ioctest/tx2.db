@@ -1,4 +1,4 @@
-record(calc, "$(P)cnt3") {
+record(calc, "$(P)cnt4") {
     field(INPA, "$(P)cnt1 CP")
     field(CALC, "A")
     field(TSEL, "$(P)cnt1.TIME CA")

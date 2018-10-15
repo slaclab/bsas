@@ -210,34 +210,47 @@ void Collector::process_test()
     max_age <<= 32;
     max_age |= epicsUInt32(1000000000u * fmod(maxEventAge, 1.0));
 
-    // iterate from oldest.  Find first which will not be flushed
-    events_t::iterator it(events.begin()), end(events.end());
-    size_t i=0;
-    for(; it!=end; ++it, i++) {
-        // flush if
+    events_t::iterator first_partial(events.end()); // first element _not_ to flush.
 
-        // * slice key is too old
-        epicsInt64 key_age = epicsInt64(now_key) - epicsInt64(it->first);
+    size_t i=events.size();
+    {
+        // iterate from most newest.  Find most recent incomplete/partial event.
+        events_t::reverse_iterator it(events.rbegin()), end(events.rend());
+        for(; it!=end; ++it, i--) {
+            // flush if
 
-        if(key_age >= epicsInt64(max_age)) {
-            if(collectorDebug>4) {
-                errlogPrintf("## test slice %llx too old %llx >= %llx\n", it->first, key_age, max_age);
+            // * slice key is too old
+            epicsInt64 key_age = epicsInt64(now_key) - epicsInt64(it->first);
+
+            if(key_age >= epicsInt64(max_age)) {
+                if(collectorDebug>4) {
+                    errlogPrintf("## test slice %llx too old %llx >= %llx\n", it->first, key_age, max_age);
+                }
+                // everything earlier is also too old.  We will flush all.
+                if(collectorDebug>1) {
+                    errlogPrintf("Reconstruct buffer overflow\n");
+                    // TODO: stat counter...
+                }
+                break;
             }
-            continue;
-        }
 
-        // * all PVs are either disconnected or have data
-        events_t::mapped_type& slice = it->second;
-        // test if all data available or disconnected
-        bool complete = true;
-        for(size_t i=0, N=pvs.size(); complete && i<N; i++) {
-            complete = !pvs[i].connected || slice[i].valid();
-            if(!complete && collectorDebug>4) {
-                errlogPrintf("## test slice %llx found incomplete %s\n", it->first, pvs[i].sub->pvname.c_str());
+            // * all PVs are either disconnected or have data
+            events_t::mapped_type& slice = it->second;
+            // test if all data available or disconnected
+            bool complete = true;
+            for(size_t i=0, N=pvs.size(); complete && i<N; i++) {
+                complete = !pvs[i].connected || slice[i].valid();
+                if(!complete && collectorDebug>4) {
+                    errlogPrintf("## test slice %llx found incomplete %s\n", it->first, pvs[i].sub->pvname.c_str());
+                }
+            }
+
+            if(complete) {
+                // found it
+                first_partial = it.base();
+                break;
             }
         }
-
-        if(!complete) break;
     }
 
     completed.clear(); // paranoia, should already be empty
@@ -245,15 +258,16 @@ void Collector::process_test()
     // 'it' points to first element _not_ to remove
 
     if(collectorDebug>3) {
-        if(it==events.begin()) {
+        if(first_partial==events.begin()) {
             errlogPrintf("## No events complete\n");
         } else {
             errlogPrintf("## %zu events complete\n", i);
         }
     }
 
-    end = it;
-    it = events.begin();
+    // flush all events before the most recent incomplete/partial event
+    events_t::iterator it(events.begin()), end(first_partial);
+
     completed.reserve(i);
     while(it!=end) {
         events_t::iterator cur = it++;
