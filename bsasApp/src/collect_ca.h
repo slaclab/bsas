@@ -77,7 +77,7 @@ struct Subscription {
     epicsMutex mutex;
 
     bool connected;
-    size_t nDisconnects, nErrors, nUpdates, nOverflows;
+    size_t nDisconnects, nErrors, nUpdates, nUpdateBytes, nOverflows;
     size_t limit;
 
     std::deque<DBRValue> values;

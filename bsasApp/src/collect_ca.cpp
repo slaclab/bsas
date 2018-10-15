@@ -135,6 +135,7 @@ Subscription::Subscription(const CAContext &context,
     ,nDisconnects(0u)
     ,nErrors(0u)
     ,nUpdates(0u)
+    ,nUpdateBytes(0u)
     ,nOverflows(0u)
     ,limit(16u) // arbitrary, will be overwritten during first data update
 {
@@ -350,6 +351,25 @@ void Subscription::onEvent (struct event_handler_args args)
             Guard G(self->mutex);
 
             self->nUpdates++;
+            /* Assumptions and approximations in bandwidth usage calculation.
+             * Assume Ethernet with MTU 1500.
+             * No IP fragmentation.
+             * No IP or TCP header options after SYN.
+             * Only one (partial) subscription per frame (worst case).
+             * Ignore other IOC -> client traffic.
+             *
+             * 14 bytes - ethernet header
+             * 20 bytes - IP header
+             * 32 bytes - TCP header
+             * 16 bytes - CA header
+             * 16 bytes - DBR_TIME_* meta-data
+             *
+             * 98+1402 body bytes in the first frame. 66+1434 in subsequent frames.
+             */
+            self->nUpdateBytes += size + 98u;
+            if(size > 1402u) {
+                self->nUpdateBytes += 66u*(1u + (size-1402u)/1434u);
+            }
 
             notify = self->values.empty();
 

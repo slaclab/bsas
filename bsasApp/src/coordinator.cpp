@@ -23,6 +23,7 @@ pvd::StructureConstPtr type_status(pvd::getFieldCreate()->createFieldBuilder()
                                        ->addArray("PV", pvd::pvString)
                                        ->addArray("connected", pvd::pvBoolean)
                                        ->addArray("nEvent", pvd::pvULong)
+                                       ->addArray("nBytes", pvd::pvULong)
                                        ->addArray("nDiscon", pvd::pvULong)
                                        ->addArray("nError", pvd::pvULong)
                                        ->addArray("nOFlow", pvd::pvULong)
@@ -54,10 +55,11 @@ Coordinator::Coordinator(CAContext &ctxt, pvas::StaticProvider &provider, const 
         pvd::shared_vector<std::string> labels;
         labels.push_back("PV");
         labels.push_back("connected");
-        labels.push_back("nEvent");
-        labels.push_back("nDiscon");
-        labels.push_back("nError");
-        labels.push_back("nOFlow");
+        labels.push_back("#Event");
+        labels.push_back("#Bytes");
+        labels.push_back("#Discon");
+        labels.push_back("#Error");
+        labels.push_back("#OFlow");
 
         pvd::PVStringArrayPtr flabel(root_status->getSubFieldT<pvd::PVStringArray>("labels"));
         flabel->replace(pvd::freeze(labels));
@@ -126,6 +128,7 @@ void Coordinator::handle()
 
                 pvd::shared_vector<pvd::boolean> conn(pvnames.size());
                 pvd::shared_vector<pvd::uint64> events(pvnames.size()),
+                                                bytes(pvnames.size()),
                                                 discons(pvnames.size()),
                                                 errors(pvnames.size()),
                                                 oflows(pvnames.size());
@@ -138,14 +141,18 @@ void Coordinator::handle()
                         conn[i] = 0;
 
                     } else {
+                        Subscription& sub = *pv.sub;
 
-                        Guard G2(pv.sub->mutex);
+                        Guard G2(sub.mutex);
 
-                        conn[i] = pv.sub->connected;
-                        events[i] = pv.sub->nUpdates;
-                        discons[i] = pv.sub->nDisconnects;
-                        errors[i] = pv.sub->nErrors;
-                        oflows[i] = pv.sub->nOverflows;
+                        conn[i] = sub.connected;
+                        events[i] = sub.nUpdates;
+                        bytes[i] = sub.nUpdateBytes;
+                        discons[i] = sub.nDisconnects;
+                        errors[i] = sub.nErrors;
+                        oflows[i] = sub.nOverflows;
+
+                        sub.nUpdates = sub.nUpdateBytes = sub.nDisconnects = sub.nErrors = sub.nOverflows = 0;
                     }
                 }
 
@@ -165,6 +172,10 @@ void Coordinator::handle()
 
                 farr = root_status->getSubFieldT<pvd::PVScalarArray>("value.nEvent");
                 farr->putFrom(pvd::freeze(events));
+                changed.set(farr->getFieldOffset());
+
+                farr = root_status->getSubFieldT<pvd::PVScalarArray>("value.nBytes");
+                farr->putFrom(pvd::freeze(bytes));
                 changed.set(farr->getFieldOffset());
 
                 farr = root_status->getSubFieldT<pvd::PVScalarArray>("value.nDiscon");
