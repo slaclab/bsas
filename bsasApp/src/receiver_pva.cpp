@@ -41,19 +41,20 @@ template<> struct default_value<std::string>  { static inline std::string is() {
 template<typename T>
 struct NumericScalarCopier : public PVAReceiver::ColCopy
 {
-    pvd::PVDoubleArrayPtr field;
+    typedef typename T::value_type value_type;
+    typename T::shared_pointer field;
 
     NumericScalarCopier(PVAReceiver& receiver, size_t coln) :PVAReceiver::ColCopy(receiver)
     {
         field = receiver.root
                 ->getSubFieldT<pvd::PVStructure>("value")
-                ->getSubFieldT<pvd::PVDoubleArray>(receiver.columns.at(coln).fname);
+                ->getSubFieldT<T>(receiver.columns.at(coln).fname);
     }
     virtual ~NumericScalarCopier() {}
 
     virtual void copy(const PVAReceiver::slices_t &s, size_t coln)
     {
-        pvd::shared_vector<T> scratch(s.size(), default_value<T>::is());
+        pvd::shared_vector<value_type> scratch(s.size(), default_value<value_type>::is());
         PVAReceiver::Column& column = receiver.columns.at(coln);
 
         for(size_t r=0, R=s.size(); r<R; r++) {
@@ -61,15 +62,15 @@ struct NumericScalarCopier : public PVAReceiver::ColCopy
 
             if(!cell.valid()) continue;
 
-            if(cell->count!=1 || cell->buffer.original_type()!=(pvd::ScalarType)pvd::ScalarTypeID<T>::value) {
-                column.ftype = (pvd::ScalarType)pvd::ScalarTypeID<T>::value;
+            if(cell->count!=1 || cell->buffer.original_type()!=(pvd::ScalarType)pvd::ScalarTypeID<value_type>::value) {
+                column.ftype = (pvd::ScalarType)pvd::ScalarTypeID<value_type>::value;
                 column.isarray = cell->count!=1;
                 receiver.retype = true;
                 return;
             }
 
             // could just alias cell->buffer.data()
-            const pvd::shared_vector<const T>& elem(pvd::static_shared_vector_cast<const T>(cell->buffer));
+            const pvd::shared_vector<const value_type>& elem(pvd::static_shared_vector_cast<const value_type>(cell->buffer));
             assert(elem.size()==1);
 
             scratch[r] = elem[0];
@@ -185,7 +186,11 @@ void PVAReceiver::slices(const slices_t& s)
                 Column& col = columns[c];
 
                 if(!col.isarray && col.ftype==pvd::pvDouble) {
-                    col.copier.reset(new NumericScalarCopier<double>(*this, c));
+                    col.copier.reset(new NumericScalarCopier<pvd::PVDoubleArray>(*this, c));
+                } else if(!col.isarray && col.ftype==pvd::pvInt) {
+                    col.copier.reset(new NumericScalarCopier<pvd::PVIntArray>(*this, c));
+                } else if(!col.isarray && col.ftype==pvd::pvUInt) {
+                    col.copier.reset(new NumericScalarCopier<pvd::PVUIntArray>(*this, c));
                 } else {
                     // TODO: not supported
                 }
