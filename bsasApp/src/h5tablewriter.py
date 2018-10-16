@@ -88,6 +88,8 @@ class TableWriter(object):
 
         self.lock = threading.Lock() # guards open HDF5 file, and our attributes
 
+        self.nextref = 0
+
         self.initial = True
         self.prevstart = None
 
@@ -168,24 +170,26 @@ class TableWriter(object):
 
                 refs = []
                 _refs_ = self.G.require_group('#refs#')
+                _path = numpy.string_(_refs_.name.encode('ascii'))
                 try:
                     null = _refs_['null']
                 except KeyError:
                     null = _refs_.create_dataset('null', data=numpy.asarray([0,1], dtype='u8'))
                     null.attrs['MATLAB_class'] = numpy.string_('double')
-                    null.attrs['H5PATH'] = _refs_.name
-                    null.attrs['MATLAB_empty'] = numpy.asarray(1, dtype='i1')
+                    null.attrs['H5PATH'] = _path
+                    null.attrs['MATLAB_empty'] = numpy.asarray(1, dtype='u1')
 
                 for img in V:
                     if img is None:
                         refs.append(null.ref)
 
                     else:
-                        dset = _refs_.create_dataset(str(time.time()), data=img,
+                        dset = _refs_.create_dataset('cellval%d'%self.nextref, data=img,
                                                     shuffle=True, compression='gzip', compression_opts=9)
                         dset.attrs['MATLAB_class'] = _mat_class[img.dtype]
-                        dset.attrs['H5PATH'] = _refs_.name
+                        dset.attrs['H5PATH'] = _path
                         refs.append(dset.ref)
+                        self.nextref += 1
 
                 cur, _one = D.shape
                 D.resize((cur+new, 1))
@@ -216,6 +220,7 @@ class TableWriter(object):
         self.F = h5py.File(fname, 'r+') # error if not exists
 
         self.G = self.F.require_group(self.group)
+        self.nextref = 0
 
     def __enter__(self):
         return self
