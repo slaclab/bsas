@@ -29,10 +29,24 @@ record(calcout, "$(P)cnt3x") {
     field(CALC, "A%2==0")
     field(OOPT, "When Non-zero")
     field(OUT , "$(P)cnt3.PROC PP")
+    field(FLNK, "$(P)imgx")
 }
 
 record(calc, "$(P)cnt3") {
     field(INPA, "$(P)cnt1")
     field(CALC, "A")
+    field(TSEL, "$(P)cnt1.TIME")
+}
+
+record(calcout, "$(P)imgx") {
+    field(INPA, "$(P)cnt1")
+    field(CALC, "A%4==0")
+    field(OOPT, "When Non-zero")
+    field(OUT , "$(P)img.PROC PP")
+}
+
+record(waveform, "$(P)img") {
+    field(FTVL, "CHAR")
+    field(NELM, "100")
     field(TSEL, "$(P)cnt1.TIME")
 }

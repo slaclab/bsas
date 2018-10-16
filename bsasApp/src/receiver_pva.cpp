@@ -62,18 +62,80 @@ struct NumericScalarCopier : public PVAReceiver::ColCopy
 
             if(!cell.valid()) continue;
 
-            if(cell->count!=1 || cell->buffer.original_type()!=(pvd::ScalarType)pvd::ScalarTypeID<value_type>::value) {
-                column.ftype = (pvd::ScalarType)pvd::ScalarTypeID<value_type>::value;
+            if(cell->count!=1 || cell->buffer.original_type()!=column.ftype) {
+                column.ftype = cell->buffer.original_type();
                 column.isarray = cell->count!=1;
                 receiver.retype = true;
+                if(receiverPVADebug>1) {
+                    errlogPrintf("%s triggers type change from scalar %d to %s %d\n",
+                                 column.fname.c_str(), column.ftype,
+                                 cell->count==1?"scalar":"array", cell->buffer.original_type());
+                }
                 return;
             }
+            assert(column.ftype==(pvd::ScalarType)pvd::ScalarTypeID<value_type>::value);
 
             // could just alias cell->buffer.data()
             const pvd::shared_vector<const value_type>& elem(pvd::static_shared_vector_cast<const value_type>(cell->buffer));
             assert(elem.size()==1);
 
             scratch[r] = elem[0];
+        }
+
+        field->replace(pvd::freeze(scratch));
+        receiver.changed.set(field->getFieldOffset());
+    }
+};
+
+struct NumericArrayCopier : public PVAReceiver::ColCopy
+{
+    pvd::PVUnionArrayPtr field;
+    pvd::UnionConstPtr utype;
+    pvd::ScalarArrayConstPtr arrtype;
+
+    NumericArrayCopier(PVAReceiver& receiver, size_t coln) :PVAReceiver::ColCopy(receiver)
+    {
+        field = receiver.root
+                ->getSubFieldT<pvd::PVStructure>("value")
+                ->getSubFieldT<pvd::PVUnionArray>(receiver.columns.at(coln).fname);
+
+        utype = std::tr1::static_pointer_cast<const pvd::UnionArray>(field->getArray())->getUnion();
+        arrtype = utype->getField<pvd::ScalarArray>(0);
+        if(!arrtype)
+            throw std::logic_error("mis-matched UnionArray with retype");
+    }
+    virtual ~NumericArrayCopier() {}
+
+    virtual void copy(const PVAReceiver::slices_t &s, size_t coln)
+    {
+        pvd::PVUnionArray::svector scratch(s.size()); // initialized with NULLs
+        PVAReceiver::Column& column = receiver.columns.at(coln);
+
+        pvd::PVDataCreatePtr create(pvd::getPVDataCreate());
+
+        for(size_t r=0, R=s.size(); r<R; r++) {
+            const DBRValue& cell = s[r].second.at(coln);
+
+            if(!cell.valid()) continue;
+
+            if(cell->buffer.original_type()!=column.ftype) {
+                column.ftype = arrtype->getElementType();
+                // always an array.  never switches (back) to scalar
+                receiver.retype = true;
+                if(receiverPVADebug>1) {
+                    errlogPrintf("%s triggers type change from array %d to array %d\n",
+                                 column.fname.c_str(), column.ftype,
+                                 cell->buffer.original_type());
+                }
+                return;
+            }
+
+            pvd::PVScalarArrayPtr arr(create->createPVScalarArray(arrtype));
+            arr->putFrom(cell->buffer);
+
+            pvd::PVUnionPtr U(create->createPVUnion(utype));
+            U->set(0, arr);
+            scratch[r] = U;
         }
 
         field->replace(pvd::freeze(scratch));
@@ -191,6 +253,8 @@ void PVAReceiver::slices(const slices_t& s)
                     col.copier.reset(new NumericScalarCopier<pvd::PVIntArray>(*this, c));
                 } else if(!col.isarray && col.ftype==pvd::pvUInt) {
                     col.copier.reset(new NumericScalarCopier<pvd::PVUIntArray>(*this, c));
+                } else if(col.isarray) {
+                    col.copier.reset(new NumericArrayCopier(*this, c));
                 } else {
                     // TODO: not supported
                 }
