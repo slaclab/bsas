@@ -18,6 +18,8 @@ from p4p.client.thread import Context, Disconnected
 
 _log = logging.getLogger(__name__)
 
+ref_dtype = h5py.special_dtype(ref=h5py.Reference)
+
 filefmt = '%%s_%Y%m%d_%H%M%S.h5'
 
 # arbitrarily force switch to a new file after # rows exceeds
@@ -31,11 +33,12 @@ Run with *TBL PV name, and prefix for output files.
 
 Switches to a new file on SIGHUP or SIGUSR1.
 Graceful exit on SIGINT.
+
+Writes HDF5 files which attempt to be MAT 7.3 compatible.
 """)
     A.add_argument('pvname')
     A.add_argument('file_prefix')
     A.add_argument('-G', '--group', default='/', help='Store under H5 Group.  Default "/"')
-    A.add_argument('-C', '--compress', action='store_true', default=False)
     A.add_argument('-v', '--verbose', action='store_const', const=logging.DEBUG, default=logging.INFO)
     return A.parse_args()
 
@@ -82,7 +85,6 @@ class TableWriter(object):
         self.pv = args.pvname
         self.fbase = args.file_prefix
         self.group = args.group
-        self.compress = args.compress
 
         self.lock = threading.Lock() # guards open HDF5 file, and our attributes
 
@@ -115,7 +117,7 @@ class TableWriter(object):
         interval = start-prevstart # >= the server update interval (based on previous update)
         dT = end-start # our processing time for this update
         if dT >= interval*0.75:
-            _log.warn("Processing time %.2f approches threshold %.2f", dT, interval)
+            _log.warn("Processing time %.2f approaches threshold %.2f", dT, interval)
         else:
             _log.debug("Processing time %.2f, threshold %.2f", dT, interval)
 
@@ -138,23 +140,56 @@ class TableWriter(object):
 
         for fld, lbl in zip(val.value.keys(), val.labels):
             V = val.value[fld]
-            new, = V.shape
-            try:
-                D = self.G[fld]
-            except KeyError:
-                kws = {}
-                if self.compress:
-                    kws['compression'] = 'gzip'
-                    kws['shuffle'] = True
-                D = self.G.create_dataset(fld, dtype=V.dtype,
-                                          shape=(0, 1), chunks=None, maxshape=(None, 1),
-                                          **kws)
-                D.attrs['label'] = lbl
-                D.attrs['MATLAB_class'] = _mat_class[V.dtype]
 
-            cur, _one = D.shape
-            D.resize((cur+new, 1))
-            D[cur:, 0] = V # copy
+            if isinstance(V, numpy.ndarray):
+                new, = V.shape
+                try:
+                    D = self.G[fld]
+                except KeyError:
+                    D = self.G.create_dataset(fld, dtype=V.dtype,
+                                            shape=(0, 1), chunks=None, maxshape=(None, 1),
+                                            shuffle=True, compression='gzip')
+                    D.attrs['label'] = lbl
+                    D.attrs['MATLAB_class'] = _mat_class[V.dtype]
+
+                cur, _one = D.shape
+                D.resize((cur+new, 1))
+                D[cur:, 0] = V # copy
+
+            elif isinstance(V, list): # union[]
+                # store as cell array
+                try:
+                    D = self.G[fld]
+                except KeyError:
+                    D = self.G.create_dataset(fld, dtype=ref_dtype,
+                                              shape=(0, 1), chunks=None, maxshape=(None, 1))
+                    D.attrs['label'] = lbl
+                    D.attrs['MATLAB_class'] = numpy.string_("cell")
+
+                refs = []
+                _refs_ = self.G.require_group('#refs#')
+                try:
+                    null = _refs_['null']
+                except KeyError:
+                    null = _refs_.create_dataset('null', data=numpy.asarray([0,1], dtype='u8'))
+                    null.attrs['MATLAB_class'] = numpy.string_('double')
+                    null.attrs['H5PATH'] = _refs_.name
+                    null.attrs['MATLAB_empty'] = numpy.asarray(1, dtype='i1')
+
+                for img in V:
+                    if img is None:
+                        refs.append(null.ref)
+
+                    else:
+                        dset = _refs_.create_dataset(str(time.time()), data=img,
+                                                    shuffle=True, compression='gzip', compression_opts=9)
+                        dset.attrs['MATLAB_class'] = _mat_class[img.dtype]
+                        dset.attrs['H5PATH'] = _refs_.name
+                        refs.append(dset.ref)
+
+                cur, _one = D.shape
+                D.resize((cur+new, 1))
+                D[cur:, 0] = refs
 
         self.F.flush() # flush this update to disk
 
