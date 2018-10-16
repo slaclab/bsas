@@ -241,13 +241,17 @@ void Collector::process_test()
             for(size_t i=0, N=pvs.size(); complete && i<N; i++) {
                 complete = !pvs[i].connected || slice[i].valid();
                 if(!complete && collectorDebug>4) {
-                    errlogPrintf("## test slice %llx found incomplete %s\n", it->first, pvs[i].sub->pvname.c_str());
+                    errlogPrintf("## test slice %llx found incomplete %s %sconn %svalid\n",
+                                 it->first, pvs[i].sub->pvname.c_str(),
+                                 !pvs[i].connected?"dis":"",
+                                 slice[i].valid()?"":"in");
                 }
             }
 
-            if(complete) {
+            if(!complete) {
                 // found it
-                first_partial = it.base();
+                first_partial = --it.base();
+                assert(it->first==first_partial->first);
                 break;
             }
         }
@@ -258,17 +262,17 @@ void Collector::process_test()
     // 'it' points to first element _not_ to remove
 
     if(collectorDebug>3) {
-        if(first_partial==events.begin()) {
+        if(first_partial==events.begin() || events.empty()) {
             errlogPrintf("## No events complete\n");
         } else {
-            errlogPrintf("## %zu events complete\n", i);
+            errlogPrintf("## %zu events complete\n", events.size()-i);
         }
     }
 
     // flush all events before the most recent incomplete/partial event
     events_t::iterator it(events.begin()), end(first_partial);
 
-    completed.reserve(i);
+    completed.reserve(events.size()-i);
     while(it!=end) {
         events_t::iterator cur = it++;
 
