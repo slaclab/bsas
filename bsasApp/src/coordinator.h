@@ -6,6 +6,8 @@
 
 struct Coordinator {
 
+    static Coordinator* lookup(const std::string&);
+
     Coordinator(CAContext& ctxt, pvas::StaticProvider& provider, const std::string& prefix);
     ~Coordinator();
 

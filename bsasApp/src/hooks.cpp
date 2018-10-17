@@ -16,11 +16,15 @@ namespace pva = epics::pvAccess;
 
 namespace {
 
-std::vector<std::string> prefixes;
-
 std::tr1::shared_ptr<CAContext> cactxt;
-std::vector<std::tr1::shared_ptr<Coordinator> > coordinators;
+
+// static after iocInit()
+typedef std::map<std::string, std::tr1::shared_ptr<Coordinator> > coordinators_t;
+coordinators_t coordinators;
+
 pvas::StaticProvider::shared_pointer provider;
+
+bool locked;
 
 void bsasExit(void *)
 {
@@ -38,6 +42,7 @@ void bsasExit(void *)
 
 void bsasHook(initHookState state)
 {
+    if(state==initHookAtBeginning) locked = true;
     if(state!=initHookAfterIocRunning) return;
     epicsAtExit(bsasExit, 0);
 
@@ -45,20 +50,30 @@ void bsasHook(initHookState state)
     // place a lower prio than the Collector workers
     cactxt.reset(new CAContext(epicsThreadPriorityMedium));
 
-    for(size_t i=0; i<prefixes.size(); i++) {
-        std::tr1::shared_ptr<Coordinator> C(new Coordinator(*cactxt, *provider, prefixes[i]));
+    for(coordinators_t::iterator it(coordinators.begin()), end(coordinators.end()); it!=end; ++it) {
+        std::tr1::shared_ptr<Coordinator> C(new Coordinator(*cactxt, *provider, it->first));
         std::tr1::shared_ptr<Coordinator::SignalsHandler> H(new Coordinator::SignalsHandler(C));
         C->pv_signals->setHandler(H);
-        coordinators.push_back(C);
+        it->second = C;
     }
 }
 
 } // namespace
 
+Coordinator* Coordinator::lookup(const std::string& name)
+{
+    coordinators_t::iterator it(coordinators.find(name));
+    return it==coordinators.end() ? 0 : it->second.get();
+}
+
 extern "C"
 void bsasTableAdd(const char *prefix)
 {
-    prefixes.push_back(prefix);
+    if(locked) {
+        printf("Not allowed after iocInit()\n");
+    } else {
+        coordinators[prefix] = std::tr1::shared_ptr<Coordinator>();
+    }
 }
 
 /* bsasTableAdd */
