@@ -8,3 +8,5 @@
 envPaths
 O.*/
 *.orig
+*.h5
+*.mat

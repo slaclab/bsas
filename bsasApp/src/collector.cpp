@@ -214,7 +214,7 @@ void Collector::process_test()
 
     size_t i=events.size();
     {
-        // iterate from most newest.  Find most recent incomplete/partial event.
+        // iterate from newest.  Find most recent incomplete/partial event.
         events_t::reverse_iterator it(events.rbegin()), end(events.rend());
         for(; it!=end; ++it, i--) {
             // flush if
@@ -240,6 +240,7 @@ void Collector::process_test()
             bool complete = true;
             for(size_t i=0, N=pvs.size(); complete && i<N; i++) {
                 complete = !pvs[i].connected || slice[i].valid();
+
                 if(!complete && collectorDebug>4) {
                     errlogPrintf("## test slice %llx found incomplete %s %sconn %svalid\n",
                                  it->first, pvs[i].sub->pvname.c_str(),
