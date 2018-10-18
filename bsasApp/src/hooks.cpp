@@ -4,6 +4,7 @@
 #include <epicsExit.h>
 
 #include <pv/pvAccess.h>
+#include <pv/reftrack.h>
 
 #include "collect_ca.h"
 #include "collector.h"
@@ -88,6 +89,11 @@ static void bsasTableAddCallFunc(const iocshArgBuf *args)
 
 static void bsasRegistrar()
 {
+    epics::registerRefCounter("CAContext", &CAContext::num_instances);
+    epics::registerRefCounter("Subscription", &Subscription::num_instances);
+    epics::registerRefCounter("Collector", &Collector::num_instances);
+    epics::registerRefCounter("Coordinator", &Coordinator::num_instances);
+    epics::registerRefCounter("PVAReceiver", &PVAReceiver::num_instances);
 
     // register our (empty) provider before the PVA server is started
 

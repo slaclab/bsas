@@ -24,6 +24,8 @@ struct Collector;
 
 struct DBRValue {
     struct Holder {
+        static size_t num_instances;
+
         epicsTimeStamp ts; // in epics epoch
         epicsUInt16 sevr, // [0-3] or 4 (Disconnect)
                     stat; // status code a la Base alarm.h
@@ -48,6 +50,8 @@ public:
 };
 
 struct CAContext {
+    static size_t num_instances;
+
     explicit CAContext(unsigned int prio, bool fake=false);
     ~CAContext();
 
@@ -64,6 +68,8 @@ struct CAContext {
 };
 
 struct Subscription {
+    static size_t num_instances;
+
     const std::string pvname;
     const CAContext& context;
     Collector& collector;

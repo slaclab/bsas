@@ -7,6 +7,8 @@
 
 struct PVAReceiver : public Receiver
 {
+    static size_t num_instances;
+
     PVAReceiver(Collector& collector);
     virtual ~PVAReceiver();
 

@@ -1,6 +1,7 @@
 
 #include <epicsStdio.h>
 
+#include <pv/reftrack.h>
 #include <pv/standardField.h>
 
 #include "coordinator.h"
@@ -34,6 +35,8 @@ pvd::StructureConstPtr type_status(pvd::getFieldCreate()->createFieldBuilder()
 
 } // namespace
 
+size_t Coordinator::num_instances;
+
 Coordinator::Coordinator(CAContext &ctxt, pvas::StaticProvider &provider, const std::string &prefix)
     :ctxt(ctxt)
     ,provider(provider)
@@ -47,6 +50,7 @@ Coordinator::Coordinator(CAContext &ctxt, pvas::StaticProvider &provider, const 
     ,signals_changed(true)
     ,running(true)
 {
+    REFTRACE_INCREMENT(num_instances);
     pv_signals->open(type_signals);
 
     root_status = pvd::getPVDataCreate()->createPVStructure(type_status);
@@ -75,6 +79,7 @@ Coordinator::Coordinator(CAContext &ctxt, pvas::StaticProvider &provider, const 
 
 Coordinator::~Coordinator()
 {
+    REFTRACE_DECREMENT(num_instances);
     {
         Guard G(mutex);
         running = false;

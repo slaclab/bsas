@@ -4,6 +4,7 @@
 
 #include <epicsMath.h>
 #include <errlog.h>
+#include <pv/reftrack.h>
 
 #include "collector.h"
 
@@ -20,6 +21,8 @@ double maxFlushPeriod = 0.5;
 
 int collectorDebug;
 
+size_t Collector::num_instances;
+
 Collector::Collector(CAContext& ctxt, const names_t &names, unsigned int prio)
     :ctxt(ctxt)
     ,receivers_changed(false)
@@ -30,6 +33,8 @@ Collector::Collector(CAContext& ctxt, const names_t &names, unsigned int prio)
                .prio(prio))
     ,oldest_key(0u)
 {
+    REFTRACE_INCREMENT(num_instances);
+
     pvs.resize(names.size());
 
     for(size_t i=0, N=names.size(); i<N; i++)
@@ -42,6 +47,7 @@ Collector::Collector(CAContext& ctxt, const names_t &names, unsigned int prio)
 
 Collector::~Collector()
 {
+    REFTRACE_DECREMENT(num_instances);
     close();
 }
 

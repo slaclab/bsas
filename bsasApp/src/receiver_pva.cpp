@@ -2,6 +2,7 @@
 #include <epicsMath.h>
 #include <errlog.h>
 
+#include <pv/reftrack.h>
 #include <pv/standardField.h>
 
 #include "receiver_pva.h"
@@ -145,15 +146,22 @@ struct NumericArrayCopier : public PVAReceiver::ColCopy
 
 } // namespace
 
+size_t PVAReceiver::num_instances;
+
 PVAReceiver::PVAReceiver(Collector& collector)
     :collector(collector)
     ,pv(pvas::SharedPV::buildReadOnly())
     ,retype(true)
 {
+    REFTRACE_INCREMENT(num_instances);
     collector.add_receiver(this); // calls our names()
 }
 
-PVAReceiver::~PVAReceiver() {close();}
+PVAReceiver::~PVAReceiver()
+{
+    REFTRACE_DECREMENT(num_instances);
+    close();
+}
 
 void PVAReceiver::close()
 {

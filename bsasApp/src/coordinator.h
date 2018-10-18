@@ -4,7 +4,9 @@
 #include "coordinator.h"
 #include "receiver_pva.h"
 
-struct Coordinator {
+struct Coordinator
+{
+    static size_t num_instances;
 
     static Coordinator* lookup(const std::string&);
 

@@ -8,6 +8,7 @@
 #include <epicsThread.h>
 #include <db_access.h>
 #include <cadef.h>
+#include <pv/reftrack.h>
 
 #include "collector.h"
 #include "collect_ca.h"
@@ -49,9 +50,12 @@ void onError(exception_handler_args args)
 
 } // namespace
 
+size_t CAContext::num_instances;
+
 CAContext::CAContext(unsigned int prio, bool fake)
     :context(0)
 {
+    REFTRACE_INCREMENT(num_instances);
     if(fake) return;
 
     epicsThreadId me = epicsThreadGetIdSelf();
@@ -91,6 +95,8 @@ CAContext::CAContext(unsigned int prio, bool fake)
 
 CAContext::~CAContext()
 {
+    REFTRACE_DECREMENT(num_instances);
+
     if(!context) return;
 
     struct ca_client_context *current = ca_current_context();
@@ -121,6 +127,8 @@ CAContext::Attach::~Attach()
         ca_attach_context(previous);
 }
 
+size_t Subscription::num_instances;
+
 Subscription::Subscription(const CAContext &context,
                            size_t column,
                            const std::string& pvname,
@@ -139,6 +147,8 @@ Subscription::Subscription(const CAContext &context,
     ,nOverflows(0u)
     ,limit(16u) // arbitrary, will be overwritten during first data update
 {
+    REFTRACE_INCREMENT(num_instances);
+
     if(!context.context) return;
 
     CAContext::Attach A(context);
@@ -153,6 +163,7 @@ Subscription::Subscription(const CAContext &context,
 Subscription::~Subscription()
 {
     close();
+    REFTRACE_DECREMENT(num_instances);
 }
 
 void Subscription::close()

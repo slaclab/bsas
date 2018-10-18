@@ -21,6 +21,8 @@ struct Receiver {
 
 struct Collector
 {
+    static size_t num_instances;
+
     typedef epics::pvData::shared_vector<const std::string> names_t;
 
     explicit Collector(CAContext &ctxt,
