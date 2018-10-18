@@ -50,6 +50,21 @@ void onError(exception_handler_args args)
 
 } // namespace
 
+size_t DBRValue::Holder::num_instances;
+
+DBRValue::Holder::Holder()
+    :sevr(4), stat(LINK_ALARM), count(1u)
+{
+    REFTRACE_INCREMENT(num_instances);
+    ts.secPastEpoch = 0;
+    ts.nsec = 0;
+}
+
+DBRValue::Holder::~Holder()
+{
+    REFTRACE_DECREMENT(num_instances);
+}
+
 size_t CAContext::num_instances;
 
 CAContext::CAContext(unsigned int prio, bool fake)

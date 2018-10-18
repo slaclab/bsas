@@ -31,7 +31,8 @@ struct DBRValue {
                     stat; // status code a la Base alarm.h
         epicsUInt32 count;
         epics::pvData::shared_vector<const void> buffer; // contains DBF_* mapped to pvd:pv* code
-        Holder() :sevr(4), stat(LINK_ALARM), count(1u) { ts.secPastEpoch = 0; ts.nsec = 0;}
+        Holder();
+        ~Holder();
     };
 private:
     std::tr1::shared_ptr<Holder> held;

@@ -89,6 +89,7 @@ static void bsasTableAddCallFunc(const iocshArgBuf *args)
 
 static void bsasRegistrar()
 {
+    epics::registerRefCounter("DBRValue", &DBRValue::Holder::num_instances);
     epics::registerRefCounter("CAContext", &CAContext::num_instances);
     epics::registerRefCounter("Subscription", &Subscription::num_instances);
     epics::registerRefCounter("Collector", &Collector::num_instances);
