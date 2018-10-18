@@ -297,9 +297,14 @@ void PVAReceiver::slices(const slices_t& s)
                 col.copier->copy(s, c);
         }
 
-        {
+        try {
             UnGuard U(G);
             pv->post(*root, changed);
+        }catch(std::logic_error&) {
+            // Assumed "Not open()".
+            // Race between names() calling us and Collector worker calling us during startup.
+            // Could avoid this with additional state tracking, but can simply ignore with no
+            // ill effects.
         }
 
     }
