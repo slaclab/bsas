@@ -64,6 +64,12 @@ void bsasHook(initHookState state)
 void bsas_report(int lvl)
 {
     try {
+        /* lvl<=0 shows only table names
+         * lvl==1 shows only PV w/ overflows
+         * lvl==2 shows only PV w/ overflows or disconnected
+         * lvl>=3 shows all
+         *
+         */
         for(coordinators_t::const_iterator it(coordinators.begin()), end(coordinators.end()); it!=end; ++it) {
             printf("Table %s\n", it->first.c_str());
             if(lvl<1) continue;
@@ -80,9 +86,14 @@ void bsas_report(int lvl)
 
                 const Subscription* sub = coord->collector->pvs[i].sub.get();
 
-                // intentionaly not locking to avoid slowing down collection
-                printf("  %s\t limit=%zu conn=%c #dis=%zu #err=%zu #up=%zu #MB=%.1f #oflow=%zu\n",
+                Guard G2(sub->mutex); // mutex order: Coordinator::mutex -> Subscription::mutex
+
+                if(lvl<2 && sub->nOverflows==0) continue;
+                if(lvl<3 && sub->connected) continue;
+
+                printf("  %s\t %zu/%zu conn=%c #dis=%zu #err=%zu #up=%zu #MB=%.1f #oflow=%zu\n",
                        sub->pvname.c_str(),
+                       sub->values.size(),
                        sub->limit,
                        sub->connected?'Y':'_',
                        sub->nDisconnects,
