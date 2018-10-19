@@ -6,10 +6,38 @@ import time
 import signal
 import sys
 import os
+import shutil
 import platform
 import errno
+import select
 import logging
 import threading
+
+try:
+    from ConfigParser import SafeConfigParser as _ConfigParser, NoOptionError
+    class ConfigParser(_ConfigParser):
+        # enable dict-like access as with py3
+        class SectionProxy(object):
+            def __init__(self, conf, sect):
+                self.conf, self.sect = conf, sect
+            def __getitem__(self, key):
+                try:
+                    return self.conf.get(self.sect, key)
+                except NoOptionError:
+                    raise KeyError(key)
+            def get(self, key, defval=None):
+                try:
+                    return self.conf.get(self.sect, key)
+                except NoOptionError:
+                    return defval
+
+        def __getitem__(self, section):
+            if section!='DEFAULT' and not self.has_section(section):
+                raise KeyError(section)
+            return self.SectionProxy(self, section)
+
+except ImportError:
+    from configparser import SafeConfigParser as ConfigParser
 
 import numpy
 import h5py
@@ -36,10 +64,10 @@ Graceful exit on SIGINT.
 
 Writes HDF5 files which attempt to be MAT 7.3 compatible.
 """)
-    A.add_argument('pvname')
-    A.add_argument('file_prefix')
-    A.add_argument('-G', '--group', default='/', help='Store under H5 Group.  Default "/"')
+    A.add_argument('conf', metavar='FILE', help='configuration file')
+    A.add_argument('--section', metavar='NAME', default='DEFAULT', help='configure file section to use')
     A.add_argument('-v', '--verbose', action='store_const', const=logging.DEBUG, default=logging.INFO)
+    A.add_argument('-q', '--quiet', action='store_const', const=logging.WARN, dest='verbose')
     return A.parse_args()
 
 def matheader(fname):
@@ -81,10 +109,24 @@ _mat_class = {
 class TableWriter(object):
     context = Context('pva', unwrap=False)
 
-    def __init__(self, args):
-        self.pv = args.pvname
-        self.fbase = args.file_prefix
-        self.group = args.group
+    def __init__(self, conf):
+        # pull out mandatory config items now
+
+        self.pv = conf['tablePV']
+
+        self.ftemplate = conf['outfile'] # passed through time.strftime()
+
+        self.ftemp = conf.get('scratch', '/tmp/bsas_%s.h5'%self.pv)
+
+        self.temp_limit = int( float(conf.get('temp_limit', '0'))*(2**30) ) # in bytes
+        if self.temp_limit <= 0:
+            stat = os.statvfs(os.path.dirname(self.ftemp))
+            # by default, limit ourself to a fraction of the FS capacity
+            self.temp_limit = int(stat.f_frsize*stat.f_blocks*0.25)
+
+        self.temp_period = float(conf.get('temp_period', '0'))*60.0 or None # in sec.
+
+        self.group = conf.get('file_group', '/')
 
         self.lock = threading.Lock() # guards open HDF5 file, and our attributes
 
@@ -95,6 +137,8 @@ class TableWriter(object):
 
         self.F, self.G = None, None # h5py.File and h5py.Group
 
+        self._migrate = None
+
         _log.info("Create subscription")
         self.S = self.context.monitor(self.pv, self._update, request='field()record[pipeline=True]', notify_disconnect=True)
 
@@ -102,6 +146,10 @@ class TableWriter(object):
         _log.info("Close subscription")
         self.S.close()
         self.flush()
+        if self._migrate is not None:
+            _log.info("Wait for final migration")
+            self._migrate.join()
+            _log.info("final migration complete")
 
     def _update(self, val):
         start, prevstart = time.time(), self.prevstart
@@ -121,7 +169,7 @@ class TableWriter(object):
         if dT >= interval*0.75:
             _log.warn("Processing time %.2f approaches threshold %.2f", dT, interval)
         else:
-            _log.debug("Processing time %.2f, threshold %.2f", dT, interval)
+            _log.info("Processing time %.2f, threshold %.2f", dT, interval)
 
     def __update(self, val): # self.lock is locked
 
@@ -206,18 +254,68 @@ class TableWriter(object):
             _log.info('Close and flush')
             self.F.flush()
             self.F.close()
+
         self.F, self.G = None, None
+
+        if self._migrate is not None:
+            # We only pipeline a single migration.
+            # If this hasn't completed, then we stall until it has completed.
+            self._migrate.join(0.01)
+            if self._migrate.isAlive():
+                _log.warn("Flush stalls waiting for previous migration to complete.  Prepare for data loss!")
+                self._migrate.join()
+
+            self._migrate = None
+            _log.info("Previous migration complete")
+
+        if os.path.isfile(self.ftemp):
+            _log.info("Starting migration of '%s'", self.ftemp)
+
+            stage2 = self.ftemp+'.tmp'
+            if os.path.isfile(stage2):
+                _log.error("Overwriting debris '%s' !", stage2)
+
+            os.rename(self.ftemp, stage2)
+
+            self._migrate = threading.Thread(name='BSAS Migration', target=self._movefile, args=(stage2,))
+            self._migrate.start()
+
+    def _movefile(self, stage2):
+        finalpath = None
+        try:
+            start = time.time()
+            # expand template with last mod time (instead of current time)
+            mtime = os.stat(stage2).st_mtime
+
+            finalpath = time.strftime(self.ftemplate, time.gmtime(mtime)) # expand using UTC
+
+            if os.path.isfile(finalpath):
+                _log.error("Migration destination '%s' already exists.  Prepare for data loss!")
+                os.remove(finalpath)
+
+            _log.info('Migrate %s -> %s', stage2, finalpath)
+            try:
+                os.makedirs(os.path.dirname(finalpath))
+            except OSError:
+                pass #if we failed, then the move will also fail
+            shutil.move(stage2, finalpath)
+
+            end = time.time()
+
+            _log.info("Migration of '%s' complete after %.2f sec", finalpath, end-start)
+        except:
+            _log.exception("Failure during Migration of '%s' -> '%s'", stage2, finalpath)
 
     def open(self):
         self.flush()
-        fname = time.strftime(filefmt)%self.fbase
-        _log.info('Open "%s"', fname)
 
-        F = h5py.File(fname, 'w-', userblock_size=512) # error if already exists
-        assert F.userblock_size>=128, F.userblock_size
-        F.close()
-        matheader(fname)
-        self.F = h5py.File(fname, 'r+') # error if not exists
+        _log.info('Open "%s"', self.ftemp)
+
+        with h5py.File(self.ftemp, 'w-', userblock_size=512) as F: # error if already exists
+            assert F.userblock_size>=128, F.userblock_size
+
+        matheader(self.ftemp)
+        self.F = h5py.File(self.ftemp, 'r+') # error if not exists
 
         self.G = self.F.require_group(self.group)
         self.nextref = 0
@@ -243,9 +341,13 @@ class SigWake(object):
     def _wake(self, num, frame):
         os.write(self._W, '!')
 
-    def wait(self):
+    def wait(self, timeout=None):
         try:
-            os.read(self._R, 1)
+            Rs, _Ws, _Es = select.select([self._R], [], [], timeout)
+            if self._R in Rs:
+                os.read(self._R, 1)
+        except select.error:
+            pass # assume EINTR
         except OSError as e:
             if e.errno!=errno.EINTR:
                 raise
@@ -264,13 +366,13 @@ def set_proc_name(newname):
     buff.value = newname
     libc.prctl(15, byref(buff), 0, 0, 0) # PR_SET_NAME=15 on Linux
 
-def main(args):
-    with TableWriter(args) as W:
+def main(conf):
+    with TableWriter(conf) as W:
         _log.info("Running")
         try:
             with SigWake() as S:
                 while True:
-                    S.wait()
+                    S.wait(W.temp_period)
                     with W.lock:
                         W.flush()
         except KeyboardInterrupt:
@@ -278,7 +380,16 @@ def main(args):
         _log.info("Done")
 
 if __name__=='__main__':
+    # set process name to allow external tools like eg. logrotate
+    # to force us to start a new file.
+    #   killall -s SIGUSR1 h5tablewriter
     set_proc_name('h5tablewriter')
     args = getargs()
+    conf = ConfigParser({
+        'PWD':os.path.dirname(args.conf),
+        'scratch':'/tmp/%(tablePV)s.h5',
+    })
+    with open(args.conf, 'r') as F:
+        conf.readfp(F)
     logging.basicConfig(level=args.verbose)
-    main(args)
+    main(conf[args.section])
