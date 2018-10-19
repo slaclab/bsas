@@ -169,6 +169,8 @@ Subscription::Subscription(const CAContext &context,
 {
     REFTRACE_INCREMENT(num_instances);
 
+    last_event = {0};
+
     if(!context.context) return;
 
     CAContext::Attach A(context);
@@ -280,6 +282,7 @@ void Subscription::onConnect (struct connection_handler_args args)
 
             {
                 Guard G(self->mutex);
+                self->last_event = {0};
                 self->connected = true;
                 self->limit = std::max(size_t(4u), size_t(bsasFlushPeriod*(maxcnt!=1u ? collectorCaArrayMaxRate : collectorCaScalarMaxRate)));
             }
@@ -416,9 +419,20 @@ void Subscription::onEvent (struct event_handler_args args)
                 self->nUpdateBytes += 66u*(1u + (size-1402u)/1434u);
             }
 
-            notify = self->values.empty();
 
-            self->_push(val);
+            if(epicsTimeDiffInSeconds(&meta.stamp, &self->last_event) > 0.0) {
+                notify = self->values.empty();
+
+                self->_push(val);
+            } else {
+                self->nErrors++;
+                notify = false;
+
+                if(collectorCaDebug>2) {
+                    errlogPrintf("%s ignoring non-monotonic TS\n", self->pvname.c_str());
+                }
+            }
+            self->last_event = meta.stamp;
         }
 
         if(notify) {

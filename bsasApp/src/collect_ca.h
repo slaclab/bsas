@@ -91,6 +91,8 @@ struct Subscription {
     // current buffer limit
     size_t limit;
 
+    epicsTimeStamp last_event;
+
     std::deque<DBRValue> values;
 
     Subscription(const CAContext& context,
