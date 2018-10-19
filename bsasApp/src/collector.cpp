@@ -193,7 +193,9 @@ void Collector::process_dequeue()
                 slice.resize(pvs.size());
 
                 if(slice[i].valid()) {
-                    errlogPrintf("%s : ignore duplicate key %llx\n", pvs[i].sub->pvname.c_str(), key);
+                    if(collectorDebug>=0) {
+                        errlogPrintf("%s : ignore duplicate key %llx\n", pvs[i].sub->pvname.c_str(), key);
+                    }
 
                 } else {
                     slice[i].swap(val);
@@ -202,7 +204,9 @@ void Collector::process_dequeue()
             } else if(pv.connected) {
                 // disconnect event
             } else if(collectorDebug>0) {
-                errlogPrintf("## %s ignore leftovers of %llx\n", pvs[i].sub->pvname.c_str(), key);
+                if(collectorDebug>=0) {
+                    errlogPrintf("## %s ignore leftovers of %llx\n", pvs[i].sub->pvname.c_str(), key);
+                }
             }
         }
     }
