@@ -256,7 +256,7 @@ void Subscription::onConnect (struct connection_handler_args args)
         if(args.op==CA_OP_CONN_UP) {
             short native = ca_field_type(args.chid);
             short promoted = dbf_type_to_DBR_TIME(native);
-            //unsigned long maxcnt = ca_element_count(args.chid);
+            unsigned long maxcnt = ca_element_count(args.chid);
 
             if(native==DBF_STRING) {
                 errlogPrintf("%s DBF_STRING not supported, ignoring\n", self->pvname.c_str());
@@ -270,6 +270,7 @@ void Subscription::onConnect (struct connection_handler_args args)
             {
                 Guard G(self->mutex);
                 self->connected = true;
+                self->limit = std::max(size_t(4u), size_t(bsasFlushPeriod*(maxcnt!=1u ? collectorCaArrayMaxRate : collectorCaScalarMaxRate)));
             }
 
         } else if(args.op==CA_OP_CONN_DOWN) {
@@ -362,6 +363,8 @@ void Subscription::onEvent (struct event_handler_args args)
         } else {
             // TODO: not currently used
 
+            Guard G(self->mutex);
+
             self->nErrors++;
             self->nOverflows++;
             if(collectorCaDebug>0) {
@@ -404,7 +407,6 @@ void Subscription::onEvent (struct event_handler_args args)
 
             notify = self->values.empty();
 
-            self->limit = std::max(size_t(4u), size_t(bsasFlushPeriod*(count>16 ? collectorCaArrayMaxRate : collectorCaScalarMaxRate)));
             self->_push(val);
         }
 
