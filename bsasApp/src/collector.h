@@ -47,6 +47,8 @@ struct Collector
     receivers_t receivers;
     bool receivers_changed;
 
+    size_t nComplete, nOverflow;
+
     epicsEvent wakeup;
 
     bool waiting;

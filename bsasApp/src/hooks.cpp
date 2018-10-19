@@ -72,12 +72,14 @@ void bsas_report(int lvl)
          */
         for(coordinators_t::const_iterator it(coordinators.begin()), end(coordinators.end()); it!=end; ++it) {
             epicsStdoutPrintf("Table %s\n", it->first.c_str());
-            if(lvl<1) continue;
 
             std::tr1::shared_ptr<const Coordinator> coord(it->second);
 
             Guard G(coord->mutex);
             if(!coord.get()) continue;
+
+            epicsStdoutPrintf("    Overflows=%zu Complete=%zu\n", coord->collector->nOverflow, coord->collector->nComplete);
+            if(lvl<1) continue;
 
             // holding Coordinator::mutex prevents signal list change.
 
@@ -153,6 +155,9 @@ void bsasStatReset(const char *name)
 
             Guard G(coord->mutex);
             if(!coord.get()) continue;
+
+            coord->collector->nOverflow = 0u;
+            coord->collector->nComplete = 0u;
 
             for(size_t i=0, N=coord->collector->pvs.size(); i<N; i++) {
                 if(!coord->collector->pvs[i].sub) continue;

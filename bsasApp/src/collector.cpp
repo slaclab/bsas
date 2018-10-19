@@ -26,6 +26,8 @@ size_t Collector::num_instances;
 Collector::Collector(CAContext& ctxt, const names_t &names, unsigned int prio)
     :ctxt(ctxt)
     ,receivers_changed(false)
+    ,nComplete(0u)
+    ,nOverflow(0u)
     ,waiting(false)
     ,run(true)
     ,processor(pvd::Thread::Config(this, &Collector::process)
@@ -165,13 +167,14 @@ void Collector::process_dequeue()
         for(size_t i=0, N=pvs.size(); i<N; i++) {
             PV& pv = pvs[i];
 
-            if(!pv.ready) continue;
+            if((i!=0 && !pv.ready) || !pv.sub) continue;
 
             DBRValue val(pv.sub->pop());
             if(!val.valid()) {
                 pv.ready = false;
                 continue;
             }
+            pv.ready = true;
 
             nothing = false; // we will do something
 
@@ -213,6 +216,7 @@ void Collector::process_dequeue()
     }
 
     if(!nothing) {
+        nOverflow++;
         // overflowed event buffer.  Flush excess events from individual queues
 
         for(size_t i=0, N=pvs.size(); i<N; i++) {
@@ -309,6 +313,7 @@ void Collector::process_test()
         oldest_key = cur->first;
 
         completed.push_back(*cur);
+        nComplete++;
 
         events.erase(cur);
     }
