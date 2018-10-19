@@ -2,12 +2,12 @@ registrar(bsasRegistrar)
 driver(bsas)
 
 variable(collectorCaDebug,int)
-variable(collectorCaScalarDepth,int)
-variable(collectorCaArrayDepth,int)
+variable(collectorCaScalarMaxRate,double)
+variable(collectorCaArrayMaxRate,double)
 
 variable(collectorDebug,int)
-variable(maxEvents,int)
+variable(maxEventRate,double)
 variable(maxEventAge,double)
-variable(maxFlushPeriod,double)
+variable(bsasFlushPeriod,double)
 
 variable(receiverPVADebug,int)

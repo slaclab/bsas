@@ -81,8 +81,9 @@ void bsas_report(int lvl)
                 const Subscription* sub = coord->collector->pvs[i].sub.get();
 
                 // intentionaly not locking to avoid slowing down collection
-                printf("  %s\t conn=%c #dis=%zu #err=%zu #up=%zu #MB=%.1f #oflow=%zu\n",
+                printf("  %s\t limit=%zu conn=%c #dis=%zu #err=%zu #up=%zu #MB=%.1f #oflow=%zu\n",
                        sub->pvname.c_str(),
+                       sub->limit,
                        sub->connected?'Y':'_',
                        sub->nDisconnects,
                        sub->nErrors,

@@ -84,4 +84,6 @@ private:
     EPICS_NOT_COPYABLE(Collector)
 };
 
+extern double bsasFlushPeriod;
+
 #endif // COLLECTOR_H

@@ -19,8 +19,8 @@ namespace pvd = epics::pvData;
 
 int collectorCaDebug;
 
-int collectorCaScalarDepth = 130;
-int collectorCaArrayDepth = 15;
+double collectorCaScalarMaxRate = 140.0;
+double collectorCaArrayMaxRate = 1.5;
 
 namespace {
 
@@ -404,7 +404,7 @@ void Subscription::onEvent (struct event_handler_args args)
 
             notify = self->values.empty();
 
-            self->limit = std::max(4, count>16 ? collectorCaArrayDepth : collectorCaScalarDepth);
+            self->limit = std::max(size_t(4u), size_t(bsasFlushPeriod*(count>16 ? collectorCaArrayMaxRate : collectorCaScalarMaxRate)));
             self->_push(val);
         }
 
@@ -422,6 +422,6 @@ void Subscription::onEvent (struct event_handler_args args)
 
 extern "C" {
 epicsExportAddress(int, collectorCaDebug);
-epicsExportAddress(int,collectorCaScalarDepth);
-epicsExportAddress(int,collectorCaArrayDepth);
+epicsExportAddress(double, collectorCaScalarMaxRate);
+epicsExportAddress(double, collectorCaArrayMaxRate);
 }

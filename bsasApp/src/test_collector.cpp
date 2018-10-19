@@ -11,7 +11,7 @@
 namespace pvd = epics::pvData;
 
 extern int collectorDebug; // see collector.cpp
-extern double maxFlushPeriod;
+extern double bsasFlushPeriod;
 
 namespace {
 
@@ -224,7 +224,7 @@ struct TestFooBar {
 MAIN(test_collector)
 {
     collectorDebug = 5;
-    maxFlushPeriod = 0.0;
+    bsasFlushPeriod = 0.0;
     testPlan(22);
     TEST_METHOD(TestFooBar, push_start);
     TEST_METHOD(TestFooBar, push_disconn);

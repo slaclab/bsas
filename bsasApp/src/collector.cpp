@@ -12,12 +12,12 @@
 
 namespace pvd = epics::pvData;
 
-// max number of potentially complete events to track
-static int maxEvents = 20;
+// limit on number of potentially complete events to track
+static double maxEventRate = 20;
 // timeout to flush partial events
-static double maxEventAge = 2.0;
+static double maxEventAge = 2.5;
 // holdoff after delivering events
-double maxFlushPeriod = 0.5;
+double bsasFlushPeriod = 2.0;
 
 int collectorDebug;
 
@@ -139,7 +139,7 @@ void Collector::process()
                 for(receivers_t::iterator it(receivers_shadow.begin()), end(receivers_shadow.end()); it!=end; ++it) {
                     (*it)->slices(completed);
                 }
-                epicsThreadSleep(maxFlushPeriod);
+                epicsThreadSleep(bsasFlushPeriod);
             }
 
             if(willwait)
@@ -156,7 +156,8 @@ void Collector::process_dequeue()
     // break if:
     // * nothing to do
     // * # of potentially complete events exceeds limit
-    while(!nothing && events.size() < size_t(std::max(10, maxEvents))) {
+    unsigned maxEvents = std::max(10.0, std::min(maxEventRate*bsasFlushPeriod, 1000.0));
+    while(!nothing && events.size() < maxEvents) {
         nothing = true;
 
         std::list<events_t::mapped_type> slices_done;
@@ -300,8 +301,8 @@ void Collector::process_test()
 }
 
 extern "C" {
-epicsExportAddress(int, maxEvents);
+epicsExportAddress(double, maxEventRate);
 epicsExportAddress(double, maxEventAge);
 epicsExportAddress(int, collectorDebug);
-epicsExportAddress(double, maxFlushPeriod);
+epicsExportAddress(double, bsasFlushPeriod);
 }
