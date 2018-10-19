@@ -71,7 +71,7 @@ void bsas_report(int lvl)
          *
          */
         for(coordinators_t::const_iterator it(coordinators.begin()), end(coordinators.end()); it!=end; ++it) {
-            printf("Table %s\n", it->first.c_str());
+            epicsStdoutPrintf("Table %s\n", it->first.c_str());
             if(lvl<1) continue;
 
             std::tr1::shared_ptr<const Coordinator> coord(it->second);
@@ -89,18 +89,18 @@ void bsas_report(int lvl)
                 Guard G2(sub->mutex); // mutex order: Coordinator::mutex -> Subscription::mutex
 
                 if(lvl<2 && sub->nOverflows==0) continue;
-                if(lvl<3 && sub->connected) continue;
+                if(lvl<3 && !sub->connected) continue;
 
-                printf("  %s\t %zu/%zu conn=%c #dis=%zu #err=%zu #up=%zu #MB=%.1f #oflow=%zu\n",
-                       sub->pvname.c_str(),
-                       sub->values.size(),
-                       sub->limit,
-                       sub->connected?'Y':'_',
-                       sub->nDisconnects,
-                       sub->nErrors,
-                       sub->nUpdates,
-                       sub->nUpdateBytes/1048576.0,
-                       sub->nOverflows);
+                epicsStdoutPrintf("  %s\t %zu/%zu conn=%c #dis=%zu #err=%zu #up=%zu #MB=%.1f #oflow=%zu\n",
+                                  sub->pvname.c_str(),
+                                  sub->values.size(),
+                                  sub->limit,
+                                  sub->connected?'Y':'_',
+                                  sub->nDisconnects,
+                                  sub->nErrors,
+                                  sub->nUpdates,
+                                  sub->nUpdateBytes/1048576.0,
+                                  sub->nOverflows);
             }
         }
 
