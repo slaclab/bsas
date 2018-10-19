@@ -81,7 +81,7 @@ struct Subscription {
     // effectively a local of a CA worker, set and cleared from onConnect()
     struct oldSubscription *evid;
 
-    epicsMutex mutex;
+    mutable epicsMutex mutex;
 
     bool connected;
     // stats counters
@@ -100,6 +100,8 @@ struct Subscription {
     ~Subscription();
 
     void close();
+
+    void clear(size_t remain);
 
     // dequeue one update
     DBRValue pop();

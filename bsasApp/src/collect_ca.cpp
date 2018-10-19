@@ -210,6 +210,16 @@ void Subscription::close()
     eca_error::check(err);
 }
 
+void Subscription::clear(size_t remain)
+{
+    Guard G(mutex);
+    while(values.size()>remain) {
+        values.pop_front();
+        nOverflows++;
+    }
+
+}
+
 DBRValue Subscription::pop()
 {
     DBRValue ret;
@@ -237,7 +247,8 @@ void Subscription::push(const DBRValue &v)
 void Subscription::_push(DBRValue& v)
 {
     while(values.size() > limit) {
-        values.pop_back();
+        // we drop newest element to maximize chance of overlapping with lower rate PVs
+        values.pop_front();
         nOverflows++;
     }
 

@@ -212,6 +212,20 @@ void Collector::process_dequeue()
         }
     }
 
+    if(!nothing) {
+        // overflowed event buffer.  Flush excess events from individual queues
+
+        for(size_t i=0, N=pvs.size(); i<N; i++) {
+            PV& pv = pvs[i];
+            if(pv.sub) {
+                // arbitrarly leave up to 4 in case we split an event across a flush.
+                // but drop excess so we don't get persistently behind.
+                pv.sub->clear(4);
+            }
+        }
+
+    }
+
     waiting = nothing; // wait if we emptied all queues
 }
 
