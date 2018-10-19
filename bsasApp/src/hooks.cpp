@@ -2,6 +2,8 @@
 #include <initHooks.h>
 #include <iocsh.h>
 #include <epicsExit.h>
+#include <drvSup.h>
+#include <epicsStdio.h>
 
 #include <pv/pvAccess.h>
 #include <pv/reftrack.h>
@@ -59,6 +61,48 @@ void bsasHook(initHookState state)
     }
 }
 
+void bsas_report(int lvl)
+{
+    try {
+        for(coordinators_t::const_iterator it(coordinators.begin()), end(coordinators.end()); it!=end; ++it) {
+            printf("Table %s\n", it->first.c_str());
+            if(lvl<1) continue;
+
+            std::tr1::shared_ptr<const Coordinator> coord(it->second);
+
+            Guard G(coord->mutex);
+            if(!coord.get()) continue;
+
+            // holding Coordinator::mutex prevents signal list change.
+
+            for(size_t i=0, N=coord->collector->pvs.size(); i<N; i++) {
+                if(!coord->collector->pvs[i].sub) continue;
+
+                const Subscription* sub = coord->collector->pvs[i].sub.get();
+
+                // intentionaly not locking to avoid slowing down collection
+                printf("  %s\t conn=%c #dis=%zu #err=%zu #up=%zu #MB=%.1f #oflow=%zu\n",
+                       sub->pvname.c_str(),
+                       sub->connected?'Y':'_',
+                       sub->nDisconnects,
+                       sub->nErrors,
+                       sub->nUpdates,
+                       sub->nUpdateBytes/1048576.0,
+                       sub->nOverflows);
+            }
+        }
+
+    }catch(std::exception& e) {
+        fprintf(stderr, "Error: %s\n", e.what());
+    }
+}
+
+drvet bsas = {
+    2,
+    (DRVSUPFUN)&bsas_report,
+    NULL,
+};
+
 } // namespace
 
 Coordinator* Coordinator::lookup(const std::string& name)
@@ -87,6 +131,47 @@ static void bsasTableAddCallFunc(const iocshArgBuf *args)
     bsasTableAdd(args[0].sval);
 }
 
+extern "C"
+void bsasStatReset(const char *name)
+{
+    try {
+        for(coordinators_t::const_iterator it(coordinators.begin()), end(coordinators.end()); it!=end; ++it) {
+            if(name && it->first!=name) continue;
+            std::tr1::shared_ptr<const Coordinator> coord(it->second);
+
+            Guard G(coord->mutex);
+            if(!coord.get()) continue;
+
+            for(size_t i=0, N=coord->collector->pvs.size(); i<N; i++) {
+                if(!coord->collector->pvs[i].sub) continue;
+
+                Subscription* sub = coord->collector->pvs[i].sub.get();
+
+                Guard G2(sub->mutex); // establishes mutex order Coordinator::mutex -> Subscription::mutex
+
+                sub->nDisconnects = sub->lDisconnects = 0u;
+                sub->nErrors = sub->lErrors = 0u;
+                sub->nUpdates = sub->lUpdates = 0u;
+                sub->nUpdateBytes = sub->lUpdateBytes = 0u;
+                sub->nOverflows = sub->lOverflows = 0u;
+            }
+        }
+
+    }catch(std::exception& e) {
+        fprintf(stderr, "Error: %s\n", e.what());
+    }
+}
+
+/* bsasStatReset */
+static const iocshArg bsasStatResetArg0 = { "prefix", iocshArgString};
+static const iocshArg * const bsasStatResetArgs[] = {&bsasStatResetArg0};
+static const iocshFuncDef bsasStatResetFuncDef = {
+    "bsasStatReset",1,bsasStatResetArgs};
+static void bsasStatResetCallFunc(const iocshArgBuf *args)
+{
+    bsasStatReset(args[0].sval);
+}
+
 static void bsasRegistrar()
 {
     epics::registerRefCounter("DBRValue", &DBRValue::Holder::num_instances);
@@ -103,9 +188,11 @@ static void bsasRegistrar()
     pva::ChannelProviderRegistry::servers()->addSingleton(provider->provider());
 
     iocshRegister(&bsasTableAddFuncDef, bsasTableAddCallFunc);
+    iocshRegister(&bsasStatResetFuncDef, bsasStatResetCallFunc);
     initHookRegister(&bsasHook);
 }
 
 extern "C" {
 epicsExportRegistrar(bsasRegistrar);
+epicsExportAddress(drvet, bsas);
 }

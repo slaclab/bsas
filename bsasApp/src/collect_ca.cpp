@@ -160,6 +160,11 @@ Subscription::Subscription(const CAContext &context,
     ,nUpdates(0u)
     ,nUpdateBytes(0u)
     ,nOverflows(0u)
+    ,lDisconnects(0u)
+    ,lErrors(0u)
+    ,lUpdates(0u)
+    ,lUpdateBytes(0u)
+    ,lOverflows(0u)
     ,limit(16u) // arbitrary, will be overwritten during first data update
 {
     REFTRACE_INCREMENT(num_instances);

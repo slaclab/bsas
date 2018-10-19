@@ -1,4 +1,6 @@
 registrar(bsasRegistrar)
+driver(bsas)
+
 variable(collectorCaDebug,int)
 variable(collectorCaScalarDepth,int)
 variable(collectorCaArrayDepth,int)

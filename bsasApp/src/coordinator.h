@@ -30,7 +30,7 @@ struct Coordinator
     Collector::names_t signals;
     bool signals_changed;
 
-    epicsMutex mutex;
+    mutable epicsMutex mutex;
     bool running;
     epicsEvent wakeup;
 

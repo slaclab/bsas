@@ -84,7 +84,11 @@ struct Subscription {
     epicsMutex mutex;
 
     bool connected;
+    // stats counters
     size_t nDisconnects, nErrors, nUpdates, nUpdateBytes, nOverflows;
+    // previous values of counters for delta
+    size_t lDisconnects, lErrors, lUpdates, lUpdateBytes, lOverflows;
+    // current buffer limit
     size_t limit;
 
     std::deque<DBRValue> values;
