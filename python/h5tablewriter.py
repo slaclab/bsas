@@ -48,11 +48,6 @@ _log = logging.getLogger(__name__)
 
 ref_dtype = h5py.special_dtype(ref=h5py.Reference)
 
-filefmt = '%%s_%Y%m%d_%H%M%S.h5'
-
-# arbitrarily force switch to a new file after # rows exceeds
-maxrows = 120*60*60*2 # ~2 hours @120Hz
-
 def getargs():
     from argparse import ArgumentParser
     A = ArgumentParser(description="""Poor man's BSAS archiver.
@@ -68,6 +63,7 @@ Writes HDF5 files which attempt to be MAT 7.3 compatible.
     A.add_argument('--section', metavar='NAME', default='DEFAULT', help='configure file section to use')
     A.add_argument('-v', '--verbose', action='store_const', const=logging.DEBUG, default=logging.INFO)
     A.add_argument('-q', '--quiet', action='store_const', const=logging.WARN, dest='verbose')
+    A.add_argument('-C', '--check', action='store_true', default=False, help="Exit after reading configuration file")
     return A.parse_args()
 
 def matheader(fname):
@@ -109,7 +105,9 @@ _mat_class = {
 class TableWriter(object):
     context = Context('pva', unwrap=False)
 
-    def __init__(self, conf):
+    def __init__(self, conf, wakeup=None, check=False):
+        self._wakeup = wakeup
+
         # pull out mandatory config items now
 
         self.pv = conf['tablePV']
@@ -128,7 +126,12 @@ class TableWriter(object):
 
         self.group = conf.get('file_group', '/')
 
-        self.lock = threading.Lock() # guards open HDF5 file, and our attributes
+        if check:
+            raise KeyboardInterrupt()
+
+        # guards open HDF5 file, and our attributes.
+        # serialize main thread and PVA worker
+        self.lock = threading.Lock()
 
         self.nextref = 0
 
@@ -142,16 +145,18 @@ class TableWriter(object):
         _log.info("Create subscription")
         self.S = self.context.monitor(self.pv, self._update, request='field()record[pipeline=True]', notify_disconnect=True)
 
-    def close(self):
+    def close(self): # self.lock is locked
         _log.info("Close subscription")
         self.S.close()
-        self.flush()
+        _log.info("Final flush")
+        self.flush(force=True)
         if self._migrate is not None:
             _log.info("Wait for final migration")
             self._migrate.join()
             _log.info("final migration complete")
 
     def _update(self, val):
+        # called from PVA worker only
         start, prevstart = time.time(), self.prevstart
         self.prevstart = start
 
@@ -219,6 +224,7 @@ class TableWriter(object):
                 refs = []
                 _refs_ = self.G.require_group('#refs#')
                 _path = numpy.string_(_refs_.name.encode('ascii'))
+                # placeholder for empty cells
                 try:
                     null = _refs_['null']
                 except KeyError:
@@ -245,21 +251,27 @@ class TableWriter(object):
 
         self.F.flush() # flush this update to disk
 
-        if D.shape[0] > maxrows:
-            # close file
-            self.flush()
+        self.flush()
 
-    def flush(self):
+    def flush(self, force=False): # self.lock is locked
         if self.F is not None:
-            _log.info('Close and flush')
             self.F.flush()
+
+            age = time.time()-self.F_time
+            size = os.stat(self.ftemp).st_size
+
+            if not force and age < self.temp_period and size < self.temp_limit:
+                _log.info('Skip rotate, too new (%.2f < %.2f) or too small (%d < %d)', age, self.temp_period, size, self.temp_limit)
+                return
+
+            _log.info('Close and rotate')
             self.F.close()
 
         self.F, self.G = None, None
 
         if self._migrate is not None:
             # We only pipeline a single migration.
-            # If this hasn't completed, then we stall until it has completed.
+            # If this hasn't completed, then we stall until it has.
             self._migrate.join(0.01)
             if self._migrate.isAlive():
                 _log.warn("Flush stalls waiting for previous migration to complete.  Prepare for data loss!")
@@ -281,6 +293,7 @@ class TableWriter(object):
             self._migrate.start()
 
     def _movefile(self, stage2):
+        # called from migration thread only
         finalpath = None
         try:
             start = time.time()
@@ -306,7 +319,7 @@ class TableWriter(object):
         except:
             _log.exception("Failure during Migration of '%s' -> '%s'", stage2, finalpath)
 
-    def open(self):
+    def open(self): # self.lock is locked
         self.flush()
 
         _log.info('Open "%s"', self.ftemp)
@@ -316,6 +329,7 @@ class TableWriter(object):
 
         matheader(self.ftemp)
         self.F = h5py.File(self.ftemp, 'r+') # error if not exists
+        self.F_time = time.time()
 
         self.G = self.F.require_group(self.group)
         self.nextref = 0
@@ -323,7 +337,8 @@ class TableWriter(object):
     def __enter__(self):
         return self
     def __exit__(self, A,B,C):
-        self.close()
+        with self.lock:
+            self.close()
 
 class SigWake(object):
     def __enter__(self):
@@ -339,6 +354,9 @@ class SigWake(object):
         os.close(self._W)
 
     def _wake(self, num, frame):
+        self.poke()
+
+    def poke(self):
         os.write(self._W, '!')
 
     def wait(self, timeout=None):
@@ -367,17 +385,17 @@ def set_proc_name(newname):
     libc.prctl(15, byref(buff), 0, 0, 0) # PR_SET_NAME=15 on Linux
 
 def main(conf):
-    with TableWriter(conf) as W:
-        _log.info("Running")
-        try:
-            with SigWake() as S:
+    try:
+        with SigWake() as S:
+            with TableWriter(conf, check=args.check) as W:
+                _log.info("Running")
                 while True:
-                    S.wait(W.temp_period)
+                    S.wait(W.temp_period/4.)
                     with W.lock:
                         W.flush()
-        except KeyboardInterrupt:
-            pass
-        _log.info("Done")
+    except KeyboardInterrupt:
+        pass
+    _log.info("Done")
 
 if __name__=='__main__':
     # set process name to allow external tools like eg. logrotate
