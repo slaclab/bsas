@@ -135,6 +135,7 @@ void Collector::process()
 
         bool willwait = waiting;
         {
+            nComplete += completed.size();
             UnGuard U(G);
 
             if(!completed.empty()) {
@@ -312,7 +313,6 @@ void Collector::process_test()
         oldest_key = cur->first;
 
         completed.push_back(*cur);
-        nComplete++;
 
         events.erase(cur);
     }
