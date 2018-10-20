@@ -122,7 +122,7 @@ class TableWriter(object):
             # by default, limit ourself to a fraction of the FS capacity
             self.temp_limit = int(stat.f_frsize*stat.f_blocks*0.25)
 
-        self.temp_period = float(conf.get('temp_period', '0'))*60.0 or None # in sec.
+        self.temp_period = float(conf.get('temp_period', '60'))*60.0 # in sec.
 
         self.group = conf.get('file_group', '/')
 
@@ -269,18 +269,18 @@ class TableWriter(object):
 
         self.F, self.G = None, None
 
-        if self._migrate is not None:
-            # We only pipeline a single migration.
-            # If this hasn't completed, then we stall until it has.
-            self._migrate.join(0.01)
-            if self._migrate.isAlive():
-                _log.warn("Flush stalls waiting for previous migration to complete.  Prepare for data loss!")
-                self._migrate.join()
-
-            self._migrate = None
-            _log.info("Previous migration complete")
-
         if os.path.isfile(self.ftemp):
+            if self._migrate is not None:
+                # We only pipeline a single migration.
+                # If this hasn't completed, then we stall until it has.
+                self._migrate.join(0.01)
+                if self._migrate.isAlive():
+                    _log.warn("Flush stalls waiting for previous migration to complete.  Prepare for data loss!")
+                    self._migrate.join()
+
+                self._migrate = None
+                _log.info("Previous migration complete")
+
             _log.info("Starting migration of '%s'", self.ftemp)
 
             stage2 = self.ftemp+'.tmp'
