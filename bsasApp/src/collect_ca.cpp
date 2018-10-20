@@ -169,7 +169,8 @@ Subscription::Subscription(const CAContext &context,
 {
     REFTRACE_INCREMENT(num_instances);
 
-    last_event = {0};
+    last_event.secPastEpoch = 0;
+    last_event.nsec = 0;
 
     if(!context.context) return;
 
@@ -282,7 +283,8 @@ void Subscription::onConnect (struct connection_handler_args args)
 
             {
                 Guard G(self->mutex);
-                self->last_event = {0};
+                self->last_event.secPastEpoch = 0;
+                self->last_event.nsec = 0;
                 self->connected = true;
                 self->limit = std::max(size_t(4u), size_t(bsasFlushPeriod*(maxcnt!=1u ? collectorCaArrayMaxRate : collectorCaScalarMaxRate)));
             }
