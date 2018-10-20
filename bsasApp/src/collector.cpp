@@ -217,13 +217,12 @@ void Collector::process_dequeue()
 
     if(!nothing) {
         nOverflow++;
-        // overflowed event buffer.  Flush excess events from individual queues
+        // overflowed event buffer.
+        // only carry over 4 events per PV
 
         for(size_t i=0, N=pvs.size(); i<N; i++) {
             PV& pv = pvs[i];
             if(pv.sub) {
-                // arbitrarly leave up to 4 in case we split an event across a flush.
-                // but drop excess so we don't get persistently behind.
                 pv.sub->clear(4);
             }
         }
@@ -316,6 +315,12 @@ void Collector::process_test()
         nComplete++;
 
         events.erase(cur);
+    }
+
+    while(events.size()>4) {
+        // only carry over 4 partials
+
+        events.erase(events.begin());
     }
 }
 
