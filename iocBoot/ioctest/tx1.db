@@ -43,6 +43,7 @@ record(calcout, "$(P)imgx") {
     field(CALC, "A%4==0")
     field(OOPT, "When Non-zero")
     field(OUT , "$(P)img.PROC PP")
+    field(FLNK, "$(FLNK=)")
 }
 
 record(waveform, "$(P)img") {

@@ -8,8 +8,8 @@ var(collectorCaDebug, 1)
 var(collectorDebug, 1)
 var(receiverPVADebug, 1)
 
-var(maxEventRate, 140.0)
-var(collectorCaScalarMaxRate, 140.0)
+var(maxEventRate, 40.0)
+var(collectorCaScalarMaxRate, 20.0)
 var(collectorCaArrayMaxRate, 1.5)
 var(bsasFlushPeriod, 2.0)
 
