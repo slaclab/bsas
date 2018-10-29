@@ -215,8 +215,6 @@ void PVAReceiver::names(const std::vector<std::string>& pvs)
     }
 
     pv->close(); // paranoia?
-
-    slices(slices_t()); // push an empty event to trigger initial (re)type
 }
 
 void PVAReceiver::slices(const slices_t& s)
@@ -289,9 +287,6 @@ void PVAReceiver::slices(const slices_t& s)
                 pv->open(*root, changed);
             }
         } // end retype
-
-        changed.clear();
-
         pvd::shared_vector<pvd::uint32> sec(s.size()), nsec(s.size());
 
         for(size_t r=0, R=s.size(); r<R; r++) {
@@ -322,6 +317,7 @@ void PVAReceiver::slices(const slices_t& s)
             // ill effects.
         }
 
+        changed.clear();
     }
 
 }
