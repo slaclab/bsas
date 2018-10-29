@@ -61,14 +61,17 @@ struct NumericScalarCopier : public PVAReceiver::ColCopy
         for(size_t r=0, R=s.size(); r<R; r++) {
             DBRValue cell(s[r].second.at(coln));
 
-            if(!cell.valid()) {
-                if(!column.last.valid() || column.last->sevr > 3u) continue;
+            if(!cell.valid() && column.last.valid()) {
                 // back fill from previous
                 cell = column.last;
             }
 
+            if(!cell.valid() || cell->sevr > 3) {
+                // disconnected
+                column.last.swap(cell);
+                continue;
 
-            if(cell->count!=1 || cell->buffer.original_type()!=column.ftype) {
+            } else if(cell->count!=1 || cell->buffer.original_type()!=column.ftype) {
                 column.ftype = cell->buffer.original_type();
                 column.isarray = cell->count!=1;
                 receiver.retype = true;
@@ -125,13 +128,17 @@ struct NumericArrayCopier : public PVAReceiver::ColCopy
         for(size_t r=0, R=s.size(); r<R; r++) {
             DBRValue cell(s[r].second.at(coln));
 
-            if(!cell.valid()) {
-                if(!column.last.valid() || column.last->sevr > 3u) continue;
+            if(!cell.valid() && column.last.valid()) {
                 // back fill from previous
                 cell = column.last;
             }
 
-            if(cell->buffer.original_type()!=column.ftype) {
+            if(!cell.valid() || cell->sevr > 3) {
+                // disconnected
+                column.last.swap(cell);
+                continue;
+
+            } else if(cell->buffer.original_type()!=column.ftype) {
                 column.ftype = arrtype->getElementType();
                 // always an array.  never switches (back) to scalar
                 receiver.retype = true;

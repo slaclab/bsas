@@ -189,7 +189,7 @@ void Collector::process_dequeue()
                 errlogPrintf("## %s event:%llx sevr %u\n", pv.sub->pvname.c_str(), key, val->sevr);
             }
 
-            if(pv.connected && key > oldest_key) {
+            if(!pv.connected || key > oldest_key) {
                 // data event
 
                 // create/update a slice

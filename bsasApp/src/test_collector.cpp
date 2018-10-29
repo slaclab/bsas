@@ -114,7 +114,7 @@ struct TestFooBar {
     {
         if(isnan(val)) {
             // expect disconnected
-            if(!value.valid()) {
+            if(!value.valid() || value->sevr>3) {
                 testPass("Expect %s disconnected.", label );
             } else {
                 double actual = pvd::shared_vector_convert<const double>(value->buffer)[0]; // assumes size()>=1
