@@ -264,7 +264,7 @@ void Collector::process_test()
             }
 
             // * all PVs are either disconnected or have data
-            events_t::mapped_type& slice = it->second;
+            const events_t::mapped_type& slice = it->second;
             // test if all data available or disconnected
             bool complete = true;
             for(size_t i=0, N=pvs.size(); complete && i<N; i++) {
@@ -321,6 +321,7 @@ void Collector::process_test()
         // only carry over 4 partials
 
         events.erase(events.begin());
+        nOverflow++;
     }
 }
 

@@ -48,6 +48,9 @@ public:
     void swap(DBRValue& o) {
         held.swap(o.held);
     }
+    void reset() {
+        held.reset();
+    }
 };
 
 struct CAContext {

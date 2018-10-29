@@ -32,6 +32,9 @@ struct PVAReceiver : public Receiver
         bool isarray;
         epics::pvData::ScalarType ftype;
 
+        // last populated value, used to backfill
+        DBRValue last;
+
         Column() :isarray(false), ftype(epics::pvData::pvDouble) {}
     };
 

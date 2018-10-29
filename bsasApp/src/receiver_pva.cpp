@@ -59,14 +59,20 @@ struct NumericScalarCopier : public PVAReceiver::ColCopy
         PVAReceiver::Column& column = receiver.columns.at(coln);
 
         for(size_t r=0, R=s.size(); r<R; r++) {
-            const DBRValue& cell = s[r].second.at(coln);
+            DBRValue cell(s[r].second.at(coln));
 
-            if(!cell.valid()) continue;
+            if(!cell.valid()) {
+                if(!column.last.valid() || column.last->sevr > 3u) continue;
+                // back fill from previous
+                cell = column.last;
+            }
+
 
             if(cell->count!=1 || cell->buffer.original_type()!=column.ftype) {
                 column.ftype = cell->buffer.original_type();
                 column.isarray = cell->count!=1;
                 receiver.retype = true;
+                column.last.reset();
                 if(receiverPVADebug>1) {
                     errlogPrintf("%s triggers type change from scalar %d to %s %d\n",
                                  column.fname.c_str(), column.ftype,
@@ -81,6 +87,8 @@ struct NumericScalarCopier : public PVAReceiver::ColCopy
             assert(elem.size()==1);
 
             scratch[r] = elem[0];
+
+            column.last.swap(cell);
         }
 
         field->replace(pvd::freeze(scratch));
@@ -115,14 +123,19 @@ struct NumericArrayCopier : public PVAReceiver::ColCopy
         pvd::PVDataCreatePtr create(pvd::getPVDataCreate());
 
         for(size_t r=0, R=s.size(); r<R; r++) {
-            const DBRValue& cell = s[r].second.at(coln);
+            DBRValue cell(s[r].second.at(coln));
 
-            if(!cell.valid()) continue;
+            if(!cell.valid()) {
+                if(!column.last.valid() || column.last->sevr > 3u) continue;
+                // back fill from previous
+                cell = column.last;
+            }
 
             if(cell->buffer.original_type()!=column.ftype) {
                 column.ftype = arrtype->getElementType();
                 // always an array.  never switches (back) to scalar
                 receiver.retype = true;
+                column.last.reset();
                 if(receiverPVADebug>1) {
                     errlogPrintf("%s triggers type change from array %d to array %d\n",
                                  column.fname.c_str(), column.ftype,
@@ -137,6 +150,8 @@ struct NumericArrayCopier : public PVAReceiver::ColCopy
             pvd::PVUnionPtr U(create->createPVUnion(utype));
             U->set(0, arr);
             scratch[r] = U;
+
+            column.last.swap(cell);
         }
 
         field->replace(pvd::freeze(scratch));
