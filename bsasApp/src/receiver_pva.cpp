@@ -128,10 +128,7 @@ struct NumericArrayCopier : public PVAReceiver::ColCopy
         for(size_t r=0, R=s.size(); r<R; r++) {
             DBRValue cell(s[r].second.at(coln));
 
-            if(!cell.valid() && column.last.valid()) {
-                // back fill from previous
-                cell = column.last;
-            }
+            // Don't backfill array values
 
             if(!cell.valid() || cell->sevr > 3) {
                 // disconnected
