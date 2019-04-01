@@ -159,11 +159,9 @@ void Collector::process_dequeue()
     // break if:
     // * nothing to do
     // * # of potentially complete events exceeds limit
-    unsigned maxEvents = std::max(10.0, std::min(maxEventRate*bsasFlushPeriod, 1000.0));
+    unsigned maxEvents = std::max(10.0, std::min(maxEventRate*bsasFlushPeriod, 5000.0));
     while(!nothing && events.size() < maxEvents) {
         nothing = true;
-
-        std::list<events_t::mapped_type> slices_done;
 
         for(size_t i=0, N=pvs.size(); i<N; i++) {
             PV& pv = pvs[i];
@@ -209,14 +207,15 @@ void Collector::process_dequeue()
             } else if(pv.connected) {
                 // disconnect event
             } else if(collectorDebug>0) {
-                if(collectorDebug>=0) {
-                    errlogPrintf("## %s ignore leftovers of %llx\n", pvs[i].sub->pvname.c_str(), key);
-                }
+                errlogPrintf("## %s ignore leftovers of %llx\n", pvs[i].sub->pvname.c_str(), key);
             }
         }
     }
 
     if(!nothing) {
+        if(collectorDebug>0) {
+            errlogPrintf("## Overflow process_dequeue() after building %zu events\n", events.size());
+        }
         nOverflow++;
         // overflowed event buffer.
         // only carry over 4 events per PV
@@ -241,25 +240,21 @@ void Collector::process_test()
 
     events_t::iterator first_partial(events.end()); // first element _not_ to flush.
 
-    size_t i=events.size();
+    size_t e=events.size();
     {
         // iterate from newest.  Find most recent incomplete/partial event.
         events_t::reverse_iterator it(events.rbegin()), end(events.rend());
-        for(; it!=end; ++it, i--) {
+        for(; it!=end; ++it, e--) {
             // flush if
 
             // * slice key is too old
             epicsInt64 key_age = epicsInt64(now_key) - epicsInt64(it->first);
 
             if(key_age >= epicsInt64(max_age)) {
-                if(collectorDebug>4) {
+                if(collectorDebug > (e<=4 && events.size()>4 ? 4 : 0)) {
                     errlogPrintf("## test slice %llx too old %llx >= %llx\n", it->first, key_age, max_age);
                 }
                 // everything earlier is also too old.  We will flush all.
-                if(collectorDebug>1) {
-                    errlogPrintf("Reconstruct buffer overflow\n");
-                    // TODO: stat counter...
-                }
                 break;
             }
 
@@ -270,7 +265,7 @@ void Collector::process_test()
             for(size_t i=0, N=pvs.size(); complete && i<N; i++) {
                 complete = !pvs[i].connected || slice[i].valid();
 
-                if(!complete && collectorDebug>4) {
+                if(!complete && collectorDebug > (e<=4 && events.size()>4 ? 4 : 0)) {
                     errlogPrintf("## test slice %llx found incomplete %s %sconn %svalid\n",
                                  it->first, pvs[i].sub->pvname.c_str(),
                                  !pvs[i].connected?"dis":"",
@@ -295,14 +290,14 @@ void Collector::process_test()
         if(first_partial==events.begin() || events.empty()) {
             errlogPrintf("## No events complete\n");
         } else {
-            errlogPrintf("## %zu events complete\n", events.size()-i);
+            errlogPrintf("## %zu events complete\n", events.size()-e);
         }
     }
 
     // flush all events before the most recent incomplete/partial event
     events_t::iterator it(events.begin()), end(first_partial);
 
-    completed.reserve(events.size()-i);
+    completed.reserve(events.size()-e);
     while(it!=end) {
         events_t::iterator cur = it++;
 
@@ -315,6 +310,11 @@ void Collector::process_test()
         completed.push_back(*cur);
 
         events.erase(cur);
+    }
+
+    if(collectorDebug>0 && events.size()>4) {
+        errlogPrintf("## Overflow process_test() drop %zu after completing %zu events\n",
+                     events.size(), completed.size());
     }
 
     while(events.size()>4) {
