@@ -1,0 +1,17 @@
+
+record(ao, "$(P)Period-SP") {
+    field(DTYP, "Spam Control Period")
+    field(OUT , "@$(NAME)")
+    field(PINI, "YES")
+    field(VAL , "1.0")
+    field(PREC, "6")
+    field(EGU , "s")
+}
+
+record(calc, "$(P)Period-I") {
+    field(SCAN, "1 second")
+    field(INPA, "$(CNT)")
+    field(CALC, "C:=A-B;B:=A;1/C")
+    field(PREC, "6")
+    field(EGU , "s")
+}

@@ -1,0 +1,6 @@
+record(ai, "$(N)") {
+    field(DTYP, "Spam Counter")
+    field(INP , "@$(NAME)")
+    field(SCAN, "I/O Intr")
+    field(TSE , "-2")
+}

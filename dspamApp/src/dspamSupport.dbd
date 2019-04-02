@@ -1,0 +1,3 @@
+registrar(dspamReg)
+device(ao, INST_IO, devSpamControlPeriod, "Spam Control Period")
+device(ai, INST_IO, devSpamCounter, "Spam Counter")

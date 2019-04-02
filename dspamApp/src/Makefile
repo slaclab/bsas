@@ -8,18 +8,20 @@ include $(TOP)/configure/CONFIG
 #=============================
 # Build the IOC application
 
+LIBRARY = dspamSupport
+
+dspamSupport_SRCS += spammer.cpp
+
+DBD += dspamSupport.dbd
+
 PROD_IOC = dspam
 # dspam.dbd will be created and installed
 DBD += dspam.dbd
 
 # dspam.dbd will be made up from these files:
 dspam_DBD += base.dbd
-
-# Include dbd files from all support applications:
-#dspam_DBD += xxx.dbd
-
-# Add all the support libraries needed by this IOC
-#dspam_LIBS += xxx
+dspam_DBD += dspamSupport.dbd
+dspam_LIBS += dspamSupport
 
 # dspam_registerRecordDeviceDriver.cpp derives from dspam.dbd
 dspam_SRCS += dspam_registerRecordDeviceDriver.cpp
