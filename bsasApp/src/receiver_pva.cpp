@@ -170,6 +170,7 @@ size_t PVAReceiver::num_instances;
 PVAReceiver::PVAReceiver(Collector& collector)
     :collector(collector)
     ,pv(pvas::SharedPV::buildReadOnly())
+    ,mutex(__FILE__, __LINE__)
     ,retype(true)
 {
     REFTRACE_INCREMENT(num_instances);

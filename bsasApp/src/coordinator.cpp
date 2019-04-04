@@ -48,6 +48,7 @@ Coordinator::Coordinator(CAContext &ctxt, pvas::StaticProvider &provider, const 
              .autostart(false)
              <<"BSAS "<<prefix)
     ,signals_changed(true)
+    ,mutex(__FILE__, __LINE__)
     ,running(true)
 {
     REFTRACE_INCREMENT(num_instances);

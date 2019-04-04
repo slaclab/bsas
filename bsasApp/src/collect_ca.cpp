@@ -154,6 +154,7 @@ Subscription::Subscription(const CAContext &context,
     ,column(column)
     ,chid(0)
     ,evid(0)
+    ,mutex(__FILE__, __LINE__)
     ,connected(false)
     ,nDisconnects(0u)
     ,nErrors(0u)
