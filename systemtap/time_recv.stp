@@ -1,0 +1,138 @@
+# Profile use of recv()
+#
+# Reset while running with:
+#   echo > /proc/systemtap/*/reset
+#
+# Print stast with
+#   echo > /proc/systemtap/*/show
+#
+# Run with '-m blah' for a repeatable module name
+
+# accumulated statistics
+
+# total time between returning from blocking recv()
+private global stat_total
+
+# time in recv()
+private global stat_trecv
+
+# time between blocking recv() return and next blocking recv() call.
+# user app processing time
+private global stat_tproc
+
+# number of non-blocking recv() between blocking recv() +1
+# number of recv() calls needed to drain socket buffer
+private global stat_nrecv
+
+# total number of bytes returned since previous blocking recv()
+# includes previous blocking recv(), excludes recv() now returning
+private global stat_nbytes
+
+private function show() {
+    println("==================================")
+
+    printf("period between recv() returns.  [%d, %d]\n", @min(stat_total), @max(stat_total))
+    print(@hist_linear(stat_total, 0, 2000, 100))
+
+    printf("number of non-blocking recv() between blocking recv()  [%d, %d]\n", @min(stat_nrecv), @max(stat_nrecv))
+    print(@hist_linear(stat_nrecv, 0, 20, 1))
+
+    printf("bytes returned per blocking recv()  [%d, %d]\n", @min(stat_nbytes), @max(stat_nbytes))
+    print(@hist_log(stat_nbytes))
+
+    printf("execution time of recv()  [%d, %d]\n", @min(stat_trecv), @max(stat_trecv))
+    print(@hist_linear(stat_trecv, 0, 2000, 100))
+
+    printf("time since previous recv() returned    aka. time spend processing previous message  [%d, %d]\n", @min(stat_tproc), @max(stat_tproc))
+    print(@hist_linear(stat_tproc, 0, 500, 5))
+}
+
+probe procfs("reset").write {
+    delete stat_total
+    delete stat_trecv
+    delete stat_tproc
+    delete stat_nrecv
+    delete stat_nbytes
+}
+
+probe procfs("show").write {
+    try{
+        show()
+    } catch(msg) {
+        println("Error:", msg)
+    }
+}
+
+probe begin {
+    printf("Start with target=%d...\n", target())
+    printf("echo > /proc/systemtap/%s/reset\n", module_name())
+    printf("echo > /proc/systemtap/%s/show\n", module_name())
+}
+probe end {
+    println("Done.")
+}
+
+private global inrx
+private global blocked
+
+private global nrecv
+private global nbytes
+
+# return time of for each thread of previous blocking recv()
+private global tlast
+
+# recv() on a TCP socket goes here
+probe kernel.function("tcp_recvmsg")
+{
+    if(pid()!=target()) next
+
+    inrx[tid()] = 1
+}
+
+# called when TCP (blocking) socket buffer empty
+probe kernel.function("sk_wait_data")
+{
+    if(pid()!=target()) next
+
+    if(tid() in inrx) {
+        blocked[tid()] = 1
+    }
+}
+
+probe kernel.function("tcp_recvmsg").return
+{
+    if(pid()!=target()) next
+
+    if(returnval()>=0) {
+        nrecv[tid()] += 1
+        nbytes[tid()] += returnval()
+
+        if(tid() in blocked) {
+            # now returning from a blocking recv()
+
+            tstart = @entry(gettimeofday_us())  # our call time
+            tend = gettimeofday_us()            # our return time (now)
+            tprev = tlast[tid()]                # previous return time
+
+            stat_trecv <<< tend - tstart
+
+            if(tprev!=0) {
+                stat_tproc <<< tstart - tprev
+                stat_total <<< tend - tprev
+                printf("%d : %d %d %d : %d\n", tid(), tprev, tend, tstart, tstart - tprev)
+            }
+            tlast[tid()] = tend
+
+            stat_nrecv  <<< nrecv[tid()]
+            stat_nbytes <<< nrecv[tid()]
+
+            delete nrecv[tid()]
+            delete nbytes[tid()]
+        }
+    } else {
+        printf("recv() error %d\n", returnval())
+    }
+
+    delete inrx[tid()]
+    delete blocked[tid()]
+}

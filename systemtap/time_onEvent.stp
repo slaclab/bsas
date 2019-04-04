@@ -1,0 +1,15 @@
+
+private global rtime
+
+#probe process.function("_ZN12Subscription7onEventE18event_handler_args").return
+probe process("/home/mdavidsaver/work/epics/base-git/lib/linux-x86_64/libca.so.4.13.1").function("_ZN6tcpiiu15processIncomingERK9epicsTimeR15callbackManager").return
+{
+    rtime <<< gettimeofday_us() - @entry(gettimeofday_us())
+}
+
+probe begin {
+    printf("Start with target=%d as %s\n", target(), module_name())
+}
+probe end {
+    print(@hist_log(rtime))
+}

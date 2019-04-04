@@ -1,0 +1,39 @@
+# Warning: this takes a long time to load while
+# it patches all the functions under net/*
+
+global traceme
+
+probe syscall.recv,
+      syscall.recvfrom,
+      syscall.recvmsg
+{
+    if(pid()==target()) {
+        printf("=> %s\n", ppfunc())
+        traceme[tid()] = 1
+    }
+}
+
+probe syscall.recv.return,
+      syscall.recvfrom.return,
+      syscall.recvmsg.return
+{
+    delete traceme[tid()]
+}
+
+probe kernel.function("*@net/*.c").call
+{
+    if(tid() in traceme) {
+        printf("%s->%s\n", thread_indent(1), ppfunc())
+    }
+}
+
+probe kernel.function("*@net/*.c").return
+{
+    if(tid() in traceme) {
+        printf("%s<-%s\n", thread_indent(-1), ppfunc())
+    }
+}
+
+probe begin {
+    printf("Start with target=%d...\n", target())
+}

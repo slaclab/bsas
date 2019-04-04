@@ -1,0 +1,26 @@
+private global rtime
+private global stime
+
+#probe process("/home/mdavidsaver/work/epics/base-git/lib/linux-x86_64/libca.so.4.13.1").statement("*@tcpiiu.cpp:482")
+probe process("/home/mdavidsaver/work/epics/base-git/lib/linux-x86_64/libca.so.4.13.1").statement("*@tcpiiu.cpp:504")
+{
+    if(pid()!=target()) next
+
+    stime[tid()] = gettimeofday_us()
+}
+
+probe process("/home/mdavidsaver/work/epics/base-git/lib/linux-x86_64/libca.so.4.13.1").statement("*@tcpiiu.cpp:477")
+{
+    if(pid()!=target()) next
+
+    start = stime[tid()]
+    if(start)
+        rtime <<< gettimeofday_us() - start
+}
+
+probe begin {
+    printf("Start with target=%d as %s\n", target(), module_name())
+}
+probe end {
+    print(@hist_log(rtime))
+}
