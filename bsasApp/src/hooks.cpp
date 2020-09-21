@@ -1,4 +1,6 @@
 
+#include <fstream>
+
 #include <initHooks.h>
 #include <iocsh.h>
 #include <epicsExit.h>
@@ -6,6 +8,7 @@
 #include <epicsStdio.h>
 
 #include <pv/pvAccess.h>
+#include <pva/client.h>
 #include <pv/reftrack.h>
 
 #include "collect_ca.h"
@@ -15,6 +18,7 @@
 
 #include <epicsExport.h>
 
+namespace pvd = epics::pvData;
 namespace pva = epics::pvAccess;
 
 namespace {
@@ -189,6 +193,62 @@ static void bsasStatResetCallFunc(const iocshArgBuf *args)
     bsasStatReset(args[0].sval);
 }
 
+extern "C"
+void bsasTableSet(const char *name, const char *filename)
+{
+    try {
+        pvd::shared_vector<std::string> signals;
+        {
+            std::ifstream strm(filename);
+
+            if(!strm.is_open()) {
+                fprintf(stderr, "Unable to open: %s\n", filename);
+                return;
+            }
+
+            std::string line;
+            while(std::getline(strm, line)) {
+                size_t prefix = line.find_first_not_of(" \t");
+                size_t suffix = line.find_last_not_of(" \t");
+
+                if(prefix>=line.size() || prefix>suffix) {
+                    continue; // blank line
+                } else if(line.at(prefix)=='#') {
+                    continue; // comment
+                }
+
+                signals.push_back(line.substr(prefix, suffix-prefix+1));
+            }
+
+            if(!strm.eof()) {
+                fprintf(stderr, "Error processing: %s\n", filename);
+                return;
+            }
+        }
+
+        pvac::ClientProvider ctxt("server:bsas");
+
+        ctxt.connect(name)
+            .put()
+            .set("value", pvd::freeze(signals))
+            .exec();
+
+    }catch(std::exception& e) {
+        fprintf(stderr, "Error: %s\n", e.what());
+    }
+}
+
+/* bsasTableSet */
+static const iocshArg bsasTableSetArg0 = { "pvname", iocshArgString};
+static const iocshArg bsasTableSetArg1 = { "filename", iocshArgString};
+static const iocshArg * const bsasTableSetArgs[] = {&bsasTableSetArg0, &bsasTableSetArg1};
+static const iocshFuncDef bsasTableSetFuncDef = {
+    "bsasTableSet",2,bsasTableSetArgs};
+static void bsasTableSetCallFunc(const iocshArgBuf *args)
+{
+    bsasTableSet(args[0].sval, args[1].sval);
+}
+
 static void bsasRegistrar()
 {
     epics::registerRefCounter("DBRValue", &DBRValue::Holder::num_instances);
@@ -206,6 +266,7 @@ static void bsasRegistrar()
 
     iocshRegister(&bsasTableAddFuncDef, bsasTableAddCallFunc);
     iocshRegister(&bsasStatResetFuncDef, bsasStatResetCallFunc);
+    iocshRegister(&bsasTableSetFuncDef, bsasTableSetCallFunc);
     initHookRegister(&bsasHook);
 }
 
