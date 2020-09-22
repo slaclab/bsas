@@ -265,7 +265,7 @@ void Collector::process_test()
             for(size_t i=0, N=pvs.size(); complete && i<N; i++) {
                 complete = !pvs[i].connected || slice[i].valid();
 
-                if(!complete && collectorDebug > (e<=4 && events.size()>4 ? 4 : 0)) {
+                if(!complete && collectorDebug > (e<=4 && events.size()>4 ? 4 : 1)) {
                     errlogPrintf("## test slice %llx found incomplete %s %sconn %svalid\n",
                                  it->first, pvs[i].sub->pvname.c_str(),
                                  !pvs[i].connected?"dis":"",
