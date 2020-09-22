@@ -1,0 +1,28 @@
+language: cpp
+compiler: gcc
+dist: bionic
+
+addons:
+  apt:
+    packages:
+    - libreadline6-dev
+    - libncurses5-dev
+    - perl
+
+env:
+  global:
+    - SETUP_PATH=.ci-local:.ci
+
+install:
+  - python .ci/cue.py prepare
+
+script:
+  - python .ci/cue.py build
+  - python .ci/cue.py test
+  - python .ci/cue.py test-results
+
+jobs:
+  include:
+  - env: BASE=7.0
+  - env: BASE=7.0
+    dist: trusty
