@@ -5,6 +5,9 @@
 
 #include "collector.h"
 
+extern "C"
+int bsasBackFill;
+
 struct PVAReceiver : public Receiver
 {
     static size_t num_instances;

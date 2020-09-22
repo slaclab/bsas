@@ -11,6 +11,8 @@
 
 namespace pvd = epics::pvData;
 
+int bsasBackFill;
+
 static int receiverPVADebug;
 
 namespace {
@@ -61,7 +63,7 @@ struct NumericScalarCopier : public PVAReceiver::ColCopy
         for(size_t r=0, R=s.size(); r<R; r++) {
             DBRValue cell(s[r].second.at(coln));
 
-            if(!cell.valid() && column.last.valid()) {
+            if(bsasBackFill && !cell.valid() && column.last.valid()) {
                 // back fill from previous
                 cell = column.last;
             }
@@ -91,9 +93,7 @@ struct NumericScalarCopier : public PVAReceiver::ColCopy
 
             scratch[r] = elem[0];
 
-            // NO backfill!  Backfill obscures whether or not we missed an update!!!
-            // column.last.swap(cell);
-            column.last.reset();
+            column.last.swap(cell);
         }
 
         field->replace(pvd::freeze(scratch));
@@ -130,7 +130,7 @@ struct NumericArrayCopier : public PVAReceiver::ColCopy
         for(size_t r=0, R=s.size(); r<R; r++) {
             DBRValue cell(s[r].second.at(coln));
 
-            if(!cell.valid() && column.last.valid()) {
+            if(bsasBackFill && !cell.valid() && column.last.valid()) {
                 // back fill from previous
                 cell = column.last;
             }
@@ -335,4 +335,5 @@ void PVAReceiver::slices(const slices_t& s)
 
 extern "C" {
 epicsExportAddress(int, receiverPVADebug);
+epicsExportAddress(int, bsasBackFill);
 }
