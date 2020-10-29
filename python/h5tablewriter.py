@@ -192,9 +192,13 @@ class TableWriter(object):
         elif self.F is None:
             self.open() # lazy (re)open on first update
 
+        # should always contain at least the two timestamp columns
+        assert len(val.labels)>0, "Empty labels"
 
+        seenone = False
         for fld, lbl in zip(val.value.keys(), val.labels):
             V = val.value[fld]
+            seenone = True
 
             if isinstance(V, numpy.ndarray):
                 new, = V.shape
@@ -248,6 +252,8 @@ class TableWriter(object):
                 cur, _one = D.shape
                 D.resize((cur+new, 1))
                 D[cur:, 0] = refs
+
+        assert seenone, (val.value.keys(), val.labels)
 
         self.F.flush() # flush this update to disk
 
