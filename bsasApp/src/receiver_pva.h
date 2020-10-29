@@ -20,7 +20,13 @@ struct PVAReceiver : public Receiver
 
     epicsMutex mutex;
 
-    bool retype;
+    enum state_t {
+        NeedRetype,
+        RetypeInProg,
+        Run,
+    } state;
+
+    epicsEvent stateRun;
 
     struct ColCopy {
         PVAReceiver& receiver;
