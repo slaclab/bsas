@@ -5,6 +5,9 @@
 
 #include "collector.h"
 
+extern "C"
+int bsasBackFill;
+
 struct PVAReceiver : public Receiver
 {
     static size_t num_instances;
@@ -17,7 +20,13 @@ struct PVAReceiver : public Receiver
 
     epicsMutex mutex;
 
-    bool retype;
+    enum state_t {
+        NeedRetype,
+        RetypeInProg,
+        Run,
+    } state;
+
+    epicsEvent stateRun;
 
     struct ColCopy {
         PVAReceiver& receiver;

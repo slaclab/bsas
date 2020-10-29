@@ -11,7 +11,6 @@
 namespace pvd = epics::pvData;
 
 extern int collectorDebug; // see collector.cpp
-extern double bsasFlushPeriod;
 
 namespace {
 

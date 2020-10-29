@@ -11,6 +11,8 @@
 
 namespace pvd = epics::pvData;
 
+int bsasBackFill;
+
 static int receiverPVADebug;
 
 namespace {
@@ -61,7 +63,7 @@ struct NumericScalarCopier : public PVAReceiver::ColCopy
         for(size_t r=0, R=s.size(); r<R; r++) {
             DBRValue cell(s[r].second.at(coln));
 
-            if(!cell.valid() && column.last.valid()) {
+            if(bsasBackFill && !cell.valid() && column.last.valid()) {
                 // back fill from previous
                 cell = column.last;
             }
@@ -74,7 +76,7 @@ struct NumericScalarCopier : public PVAReceiver::ColCopy
             } else if(cell->count!=1 || cell->buffer.original_type()!=column.ftype) {
                 column.ftype = cell->buffer.original_type();
                 column.isarray = cell->count!=1;
-                receiver.retype = true;
+                receiver.state = PVAReceiver::NeedRetype;
                 column.last.reset();
                 if(receiverPVADebug>1) {
                     errlogPrintf("%s triggers type change from scalar %d to %s %d\n",
@@ -91,9 +93,7 @@ struct NumericScalarCopier : public PVAReceiver::ColCopy
 
             scratch[r] = elem[0];
 
-            // NO backfill!  Backfill obscures whether or not we missed an update!!!
-            // column.last.swap(cell);
-            column.last.reset();
+            column.last.swap(cell);
         }
 
         field->replace(pvd::freeze(scratch));
@@ -130,7 +130,7 @@ struct NumericArrayCopier : public PVAReceiver::ColCopy
         for(size_t r=0, R=s.size(); r<R; r++) {
             DBRValue cell(s[r].second.at(coln));
 
-            if(!cell.valid() && column.last.valid()) {
+            if(bsasBackFill && !cell.valid() && column.last.valid()) {
                 // back fill from previous
                 cell = column.last;
             }
@@ -143,7 +143,7 @@ struct NumericArrayCopier : public PVAReceiver::ColCopy
             } else if(cell->buffer.original_type()!=column.ftype) {
                 column.ftype = arrtype->getElementType();
                 // always an array.  never switches (back) to scalar
-                receiver.retype = true;
+                receiver.state = PVAReceiver::NeedRetype;
                 column.last.reset();
                 if(receiverPVADebug>1) {
                     errlogPrintf("%s triggers type change from array %d to array %d\n",
@@ -175,10 +175,12 @@ size_t PVAReceiver::num_instances;
 PVAReceiver::PVAReceiver(Collector& collector)
     :collector(collector)
     ,pv(pvas::SharedPV::buildReadOnly())
-    ,retype(true)
+    ,state(NeedRetype)
 {
     REFTRACE_INCREMENT(num_instances);
     collector.add_receiver(this); // calls our names()
+    // populate initial type
+    slices(slices_t());
 }
 
 PVAReceiver::~PVAReceiver()
@@ -220,7 +222,7 @@ void PVAReceiver::names(const std::vector<std::string>& pvs)
         root.reset();
         changed.clear();
 
-        retype = true;
+        state = NeedRetype;
     }
 
     pv->close(); // paranoia?
@@ -229,10 +231,10 @@ void PVAReceiver::names(const std::vector<std::string>& pvs)
 void PVAReceiver::slices(const slices_t& s)
 {
     {
-        Guard G(mutex); // safely on Collector worker thread, but paranoia...
+        Guard G(mutex);
 
-        if(retype) {
-            retype = false;
+        if(state == NeedRetype) {
+            state = RetypeInProg;
             if(receiverPVADebug>0) {
                 errlogPrintf("PVAReceiver type change\n");
             }
@@ -295,7 +297,17 @@ void PVAReceiver::slices(const slices_t& s)
                 pv->close();
                 pv->open(*root, changed);
             }
-        } // end retype
+
+            state = Run;
+            stateRun.signal();
+
+        }
+
+        while(state!=Run) {
+            UnGuard U(G);
+            stateRun.wait();
+        }
+
         pvd::shared_vector<pvd::uint32> sec(s.size()), nsec(s.size());
 
         for(size_t r=0, R=s.size(); r<R; r++) {
@@ -316,14 +328,9 @@ void PVAReceiver::slices(const slices_t& s)
                 col.copier->copy(s, c);
         }
 
-        try {
+        {
             UnGuard U(G);
             pv->post(*root, changed);
-        }catch(std::logic_error&) {
-            // Assumed "Not open()".
-            // Race between names() calling us and Collector worker calling us during startup.
-            // Could avoid this with additional state tracking, but can simply ignore with no
-            // ill effects.
         }
 
         changed.clear();
@@ -333,4 +340,5 @@ void PVAReceiver::slices(const slices_t& s)
 
 extern "C" {
 epicsExportAddress(int, receiverPVADebug);
+epicsExportAddress(int, bsasBackFill);
 }
